@@ -13,6 +13,19 @@ export type FieldAtom =
 
 export type FieldValue = FieldAtom | { readonly kind: "multi"; readonly values: readonly FieldAtom[] };
 
+export type SafeJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly SafeJsonValue[]
+  | { readonly [key: string]: SafeJsonValue };
+
+/** Unknown upstream values are preserved for reads, but intentionally excluded from FieldValue writes. */
+export type ReadableFieldValue =
+  | FieldValue
+  | { readonly kind: "unknown"; readonly value: SafeJsonValue };
+
 export type CustomFieldChange = { readonly field: FieldSelector } & (
   | { readonly action: "set"; readonly value: FieldValue }
   | { readonly action: "clear" }

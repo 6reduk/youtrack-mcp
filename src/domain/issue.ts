@@ -1,4 +1,4 @@
-import type { FieldValue } from "./field-values.js";
+import type { ReadableFieldValue } from "./field-values.js";
 import type { LinkSnapshot } from "./links.js";
 import type { ProjectSummary } from "./project-schema.js";
 
@@ -22,7 +22,7 @@ export interface IssueCustomFieldSnapshot {
   readonly name: string;
   readonly fieldType: string;
   readonly valueType: string | null;
-  readonly value: FieldValue | null;
+  readonly value: ReadableFieldValue | null;
   readonly rawType: string | null;
 }
 
