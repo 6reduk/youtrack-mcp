@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
 import { pathToFileURL } from "node:url";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { ConfigError, loadRuntimeConfig } from "./infrastructure/config.js";
 import { RedactingLogger } from "./infrastructure/logging/redacting-logger.js";
+import { createReadContext, createServer } from "./server/create-server.js";
 
-export function main(
+export async function main(
   argv: readonly string[] = process.argv.slice(2),
   env: NodeJS.ProcessEnv = process.env,
-): number {
+): Promise<number> {
   if (argv.length > 0) {
     process.stderr.write("youtrack-mcp: CLI arguments are not supported; configure through environment\n");
     return 2;
@@ -25,7 +27,8 @@ export function main(
       requestTimeoutMs: config.requestTimeoutMs,
     });
 
-    // MCP transport and tools are added in the approved read-only stages.
+    const server = createServer(createReadContext(config, logger));
+    await server.connect(new StdioServerTransport());
     return 0;
   } catch (error: unknown) {
     const message = error instanceof ConfigError ? error.message : "Unexpected startup failure";
@@ -38,5 +41,5 @@ const isDirectExecution =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isDirectExecution) {
-  process.exitCode = main();
+  void main().then((code) => { process.exitCode = code; });
 }

@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src test --max-warnings 0",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:live:read": "node --import tsx --test \"test/live/read-only/**/*.test.ts\"",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "repository": {
