@@ -22,13 +22,20 @@ const READ_TOOLS = [
 
 const MUTATION_TOOLS = [
   "youtrack_create_issue",
+  "youtrack_add_link",
+  "youtrack_remove_link",
+  "youtrack_set_parent",
+  "youtrack_remove_parent",
+  "youtrack_add_tag",
+  "youtrack_remove_tag",
+  "youtrack_create_tag",
   "youtrack_set_assignee",
   "youtrack_set_custom_field",
   "youtrack_set_issue_state",
   "youtrack_update_issue",
 ];
 
-void test("stdio initialize lists exactly the approved Stage 1-6 tools", async () => {
+void test("stdio initialize lists exactly the approved Stage 1-7 tools", async () => {
   await withStdioClient({
     YOUTRACK_URL: "https://tracker.example.test/",
     YOUTRACK_TOKEN: "protocol-secret",

@@ -21,6 +21,8 @@ import type {
   YouTrackGateway,
   MutationWriteReceipt,
   UpdateIssueCommand,
+  CreateTagCommand,
+  LinkContainerReference,
 } from "../../../src/application/ports.js";
 
 export const PROJECT_A: ProjectSummary = {
@@ -213,6 +215,12 @@ export class FakeGateway implements YouTrackGateway {
     void command;
     return Promise.reject(new Error("FakeGateway updateIssue is not configured"));
   }
+  public listLinkContainers(issue: IssueSelector): Promise<readonly LinkContainerReference[]> { void issue; return Promise.resolve([{ id: "container-a", linkTypeId: LINK_TYPE_A.id, direction: "source_to_target" }]); }
+  public addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> { void issue; void containerId; void targetIssueId; return Promise.reject(new Error("not configured")); }
+  public removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> { void issue; void containerId; void targetIssueId; return Promise.reject(new Error("not configured")); }
+  public addIssueTag(issue: IssueSelector, tagId: string): Promise<void> { void issue; void tagId; return Promise.reject(new Error("not configured")); }
+  public removeIssueTag(issue: IssueSelector, tagId: string): Promise<void> { void issue; void tagId; return Promise.reject(new Error("not configured")); }
+  public createTag(command: CreateTagCommand): Promise<TagSummary> { void command; return Promise.reject(new Error("not configured")); }
 }
 
 class SequenceIds implements IdGenerator {

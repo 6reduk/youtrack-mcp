@@ -28,6 +28,17 @@ export interface MutationWriteReceipt {
   readonly issueIdReadable: string | null;
 }
 
+export interface LinkContainerReference {
+  readonly id: string;
+  readonly linkTypeId: string;
+  readonly direction: LinkDirection;
+}
+
+export interface CreateTagCommand {
+  readonly name: string;
+  readonly ownerId: string;
+}
+
 export interface PageSlice<T> {
   readonly items: readonly T[];
   readonly hasMore: boolean;
@@ -108,6 +119,12 @@ export interface YouTrackGateway {
   findUsers(query: UserListQuery): Promise<PageSlice<UserSummary>>;
   createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt>;
   updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt>;
+  listLinkContainers(issue: IssueSelector): Promise<readonly LinkContainerReference[]>;
+  addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void>;
+  removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void>;
+  addIssueTag(issue: IssueSelector, tagId: string): Promise<void>;
+  removeIssueTag(issue: IssueSelector, tagId: string): Promise<void>;
+  createTag(command: CreateTagCommand): Promise<TagSummary>;
 }
 
 export interface ConnectionConfigReader {

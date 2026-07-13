@@ -4,8 +4,8 @@ import type { VerificationResult } from "../domain/verification.js";
 import { YouTrackHttpError } from "../infrastructure/http/error-mapper.js";
 
 export interface MutationGuards {
-  readonly dryRun?: boolean;
-  readonly expectedUpdatedAt?: number;
+  readonly dryRun?: boolean | undefined;
+  readonly expectedUpdatedAt?: number | undefined;
 }
 
 export interface MutationPlan {

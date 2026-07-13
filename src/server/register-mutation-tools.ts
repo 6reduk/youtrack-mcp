@@ -5,6 +5,9 @@ import { setAssignee } from "../application/mutations/set-assignee.js";
 import { setCustomField } from "../application/mutations/set-custom-field.js";
 import { setIssueState } from "../application/mutations/set-issue-state.js";
 import { updateIssue } from "../application/mutations/update-issue.js";
+import { addLink, removeLink } from "../application/mutations/links.js";
+import { setParent, removeParent } from "../application/mutations/hierarchy.js";
+import { addTag, removeTag, createTag } from "../application/mutations/tags.js";
 import type { MutationContext } from "../application/ports.js";
 import type { OperationResult } from "../domain/operation-result.js";
 import { presentResult, presentSafeFailure } from "./result-presenter.js";
@@ -27,6 +30,9 @@ const userSelector = z.union([
   z.strictObject({ login: z.string().trim().min(1) }),
   z.strictObject({ email: z.email() }),
 ]);
+const tagSelector = entitySelector;
+const linkTypeSelector = entitySelector;
+const linkDirection = z.enum(["source_to_target", "target_to_source"]);
 const atom = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("scalar"), value: z.union([z.string(), z.number(), z.boolean()]) }),
   z.strictObject({ kind: z.literal("date"), epochMillis: z.number().int() }),
@@ -133,4 +139,12 @@ export function registerMutationTools(server: McpServer, context: MutationContex
     if (input.user === undefined) throw new Error("validated user missing");
     return setAssignee(context, { ...common, action: "set", user: input.user });
   }, true);
+
+  register(server, context, "youtrack_add_link", z.strictObject({ source: issueSelector, target: issueSelector, linkType: linkTypeSelector, direction: linkDirection, preventCycle: z.boolean().default(false), ...guards }), (input) => addLink(context, input), true);
+  register(server, context, "youtrack_remove_link", z.strictObject({ source: issueSelector, target: issueSelector, linkType: linkTypeSelector, direction: linkDirection, expectedExisting: z.literal(true), ...guards }), (input) => removeLink(context, input), true);
+  register(server, context, "youtrack_set_parent", z.strictObject({ child: issueSelector, parent: issueSelector, linkType: linkTypeSelector, parentToChildDirection: linkDirection, preventCycle: z.boolean().default(true), replaceExisting: z.boolean().default(false), expectedCurrentParent: issueSelector.optional(), ...guards }), (input) => setParent(context, input), true);
+  register(server, context, "youtrack_remove_parent", z.strictObject({ child: issueSelector, expectedParent: issueSelector, linkType: linkTypeSelector, parentToChildDirection: linkDirection, ...guards }), (input) => removeParent(context, input), true);
+  register(server, context, "youtrack_add_tag", z.strictObject({ issue: issueSelector, tag: tagSelector, ...guards }), (input) => addTag(context, input), true);
+  register(server, context, "youtrack_remove_tag", z.strictObject({ issue: issueSelector, tag: tagSelector, ...guards }), (input) => removeTag(context, input), true);
+  register(server, context, "youtrack_create_tag", z.strictObject({ name: z.string().trim().min(1).max(255), owner: userSelector, visibleFor: z.array(entitySelector).optional(), updateableBy: z.array(entitySelector).optional(), dryRun: z.boolean().default(false) }), (input) => createTag(context, input), false);
 }

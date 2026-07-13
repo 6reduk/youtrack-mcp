@@ -23,7 +23,7 @@ export interface HttpClientOptions {
 }
 
 export interface JsonRequest {
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "DELETE";
   readonly path: string;
   readonly query?: Readonly<Record<string, string | number | boolean | undefined>>;
   readonly requestId: string;

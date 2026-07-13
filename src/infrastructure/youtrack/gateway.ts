@@ -13,6 +13,8 @@ import type {
   CreateIssueCommand,
   MutationWriteReceipt,
   UpdateIssueCommand,
+  CreateTagCommand,
+  LinkContainerReference,
 } from "../../application/ports.js";
 import { getSelectorEntry, type IssueSelector, type PageRequest, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../../domain/issue.js";
@@ -276,5 +278,41 @@ export class RestYouTrackGateway implements YouTrackGateway {
       issueId: typeof raw.id === "string" ? raw.id : getSelectorEntry(issue, ["id", "idReadable"]).value,
       issueIdReadable: typeof raw.idReadable === "string" ? raw.idReadable : null,
     };
+  }
+
+  public async listLinkContainers(issue: IssueSelector): Promise<readonly LinkContainerReference[]> {
+    const result: LinkContainerReference[] = [];
+    for (let skip = 0; ; skip += 100) {
+      const raw = await this.#http.getJson<IssueLinkDto[]>(`${issuePath(issue)}/links`, {
+        fields: ISSUE_LINK_CONTAINER_FIELDS, $skip: skip, $top: 100,
+      }, randomUUID());
+      for (const item of raw) {
+        if (typeof item.id !== "string" || typeof item.linkType?.id !== "string") continue;
+        const direction = item.direction === "INWARD" ? "target_to_source" : "source_to_target";
+        result.push({ id: item.id, linkTypeId: item.linkType.id, direction });
+      }
+      if (raw.length < 100) return result;
+    }
+  }
+
+  public async addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> {
+    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues`, requestId: randomUUID(), body: { id: targetIssueId } });
+  }
+
+  public async removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> {
+    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues/${encodeURIComponent(targetIssueId)}`, requestId: randomUUID() });
+  }
+
+  public async addIssueTag(issue: IssueSelector, tagId: string): Promise<void> {
+    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/tags`, requestId: randomUUID(), body: { id: tagId } });
+  }
+
+  public async removeIssueTag(issue: IssueSelector, tagId: string): Promise<void> {
+    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/tags/${encodeURIComponent(tagId)}`, requestId: randomUUID() });
+  }
+
+  public async createTag(command: CreateTagCommand): Promise<TagSummary> {
+    const raw = await this.#http.requestJson<TagDto>({ method: "POST", path: "tags", query: { fields: TAG_FIELDS }, requestId: randomUUID(), body: { name: command.name, owner: { id: command.ownerId } } });
+    return mapTag(raw, this.#baseUrl);
   }
 }
