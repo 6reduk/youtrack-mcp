@@ -20,16 +20,26 @@ const READ_TOOLS = [
   "youtrack_search_issues",
 ];
 
-void test("stdio initialize lists exactly the approved read-only tools", async () => {
+const MUTATION_TOOLS = [
+  "youtrack_create_issue",
+  "youtrack_set_assignee",
+  "youtrack_set_custom_field",
+  "youtrack_set_issue_state",
+  "youtrack_update_issue",
+];
+
+void test("stdio initialize lists exactly the approved Stage 1-6 tools", async () => {
   await withStdioClient({
     YOUTRACK_URL: "https://tracker.example.test/",
     YOUTRACK_TOKEN: "protocol-secret",
     YOUTRACK_LOG_LEVEL: "error",
   }, async (client) => {
     const tools = await client.listTools();
-    assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), READ_TOOLS);
-    assert.equal(tools.tools.every((tool) => tool.annotations?.readOnlyHint === true), true);
-    assert.equal(tools.tools.some((tool) => /create|update|set_|add_|remove_/.test(tool.name)), false);
+    assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [...READ_TOOLS, ...MUTATION_TOOLS].sort());
+    const readTools = tools.tools.filter((tool) => READ_TOOLS.includes(tool.name));
+    const mutationTools = tools.tools.filter((tool) => MUTATION_TOOLS.includes(tool.name));
+    assert.equal(readTools.every((tool) => tool.annotations?.readOnlyHint === true), true);
+    assert.equal(mutationTools.every((tool) => tool.annotations?.destructiveHint === true), true);
   });
 });
 

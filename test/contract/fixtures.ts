@@ -38,6 +38,7 @@ export const PROJECT_FIELD_DTO = {
     fieldType: { id: "enum[1]", valueType: "enum" },
   },
   bundle: {
+    id: "bundle-x-id",
     values: [{ id: "choice-x-id", name: "Choice X", $type: "EnumBundleElement" }],
   },
 };

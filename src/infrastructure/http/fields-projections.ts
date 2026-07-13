@@ -9,7 +9,7 @@ export const PROJECT_FIELD_FIELDS =
 export const ALLOWED_VALUE_FIELDS =
   "id,name,localizedName,isResolved,description,$type,login,fullName,banned";
 export const PROJECT_FIELD_WITH_BUNDLE_FIELDS =
-  `${PROJECT_FIELD_FIELDS},bundle(id,$type,values(${ALLOWED_VALUE_FIELDS}),aggregatedUsers(${USER_FIELDS}))`;
+  `${PROJECT_FIELD_FIELDS},defaultValues(${ALLOWED_VALUE_FIELDS}),bundle(id,$type,values(${ALLOWED_VALUE_FIELDS}),aggregatedUsers(${USER_FIELDS}))`;
 export const ISSUE_CUSTOM_FIELD_FIELDS =
   `id,name,$type,value(id,name,localizedName,login,fullName,email,banned,isResolved,$type),projectCustomField(${PROJECT_FIELD_WITH_BUNDLE_FIELDS})`;
 export const ISSUE_LINK_FIELDS =

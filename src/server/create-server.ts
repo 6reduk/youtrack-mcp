@@ -5,6 +5,7 @@ import type { RuntimeConfig } from "../infrastructure/config.js";
 import { YouTrackHttpClient } from "../infrastructure/http/youtrack-http-client.js";
 import { RestYouTrackGateway } from "../infrastructure/youtrack/gateway.js";
 import { registerReadTools } from "./register-read-tools.js";
+import { registerMutationTools } from "./register-mutation-tools.js";
 
 class UuidGenerator implements IdGenerator {
   public nextId(): string { return randomUUID(); }
@@ -29,5 +30,6 @@ export function createReadContext(config: RuntimeConfig, logger: LoggerPort): Re
 export function createServer(context: ReadContext): McpServer {
   const server = new McpServer({ name: "youtrack-mcp", version: "0.1.0" });
   registerReadTools(server, context);
+  registerMutationTools(server, context);
   return server;
 }

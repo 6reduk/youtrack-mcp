@@ -32,6 +32,7 @@ export interface FieldDefinition {
   readonly valueShape: FieldValueShape;
   readonly cardinality: Cardinality;
   readonly required: boolean | null;
+  readonly hasDefaultValue?: boolean | null;
   readonly writability: Writability;
   readonly valuesComplete: boolean;
   readonly allowedValues: readonly AllowedValue[];

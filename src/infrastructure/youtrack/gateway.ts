@@ -10,6 +10,9 @@ import type {
   TagListQuery,
   UserListQuery,
   YouTrackGateway,
+  CreateIssueCommand,
+  MutationWriteReceipt,
+  UpdateIssueCommand,
 } from "../../application/ports.js";
 import { getSelectorEntry, type IssueSelector, type PageRequest, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../../domain/issue.js";
@@ -33,8 +36,8 @@ function page<T>(items: readonly T[], top: number): PageSlice<T> {
   return { items: items.slice(0, top), hasMore: items.length > top };
 }
 
-function issueKey(selector: IssueSelector): string {
-  return encodeURIComponent(getSelectorEntry(selector, ["id", "idReadable"]).value);
+function issuePath(selector: IssueSelector): string {
+  return `issues/${encodeURIComponent(getSelectorEntry(selector, ["id", "idReadable"]).value)}`;
 }
 
 function sameProject(project: ProjectSummary, selector: ProjectSelector): boolean {
@@ -95,7 +98,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
 
   public async getProbeProjectSchema(issue: IssueSelector): Promise<ProbeSchemaFragment | null> {
     try {
-      const raw = await this.#http.getJson<IssueDto>(issueKey(issue), {
+      const raw = await this.#http.getJson<IssueDto>(issuePath(issue), {
         fields: ISSUE_FIELDS,
       }, randomUUID());
       if (raw.project == null) return null;
@@ -123,7 +126,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
 
   public async getIssue(issue: IssueSelector, sections: readonly IssueSection[]): Promise<IssueSnapshot | null> {
     try {
-      const raw = await this.#http.getJson<IssueDto>(issueKey(issue), { fields: ISSUE_FIELDS }, randomUUID());
+      const raw = await this.#http.getJson<IssueDto>(issuePath(issue), { fields: ISSUE_FIELDS }, randomUUID());
       const tags = sections.includes("tags") ? (await this.listIssueTags(issue, { skip: 0, top: 100 })).items : [];
       const links = sections.includes("links") ? (await this.listIssueLinks(issue, { skip: 0, top: 100 })).items : [];
       return mapIssue(raw, this.#baseUrl, tags, links);
@@ -144,7 +147,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
   }
 
   public async listIssueLinks(issue: IssueSelector, requested: PageRequest): Promise<PageSlice<LinkSnapshot>> {
-    const baseRaw = await this.#http.getJson<IssueDto>(issueKey(issue), {
+    const baseRaw = await this.#http.getJson<IssueDto>(issuePath(issue), {
       fields: "id,idReadable,summary",
     }, randomUUID());
     const base = mapIssueReference(baseRaw, this.#baseUrl);
@@ -152,7 +155,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
     const links: LinkSnapshot[] = [];
     const containerPageSize = 100;
     for (let containerSkip = 0; links.length < needed; containerSkip += containerPageSize) {
-      const containers = await this.#http.getJson<IssueLinkDto[]>(`${issueKey(issue)}/links`, {
+      const containers = await this.#http.getJson<IssueLinkDto[]>(`${issuePath(issue)}/links`, {
         fields: ISSUE_LINK_CONTAINER_FIELDS,
         $skip: containerSkip,
         $top: containerPageSize,
@@ -163,7 +166,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
         if (containerId === null) continue;
         for (let relatedSkip = 0; links.length < needed; relatedSkip += 100) {
           const related = await this.#http.getJson<IssueDto[]>(
-            `${issueKey(issue)}/links/${encodeURIComponent(containerId)}/issues`,
+            `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues`,
             { fields: "id,idReadable,summary", $skip: relatedSkip, $top: 100 },
             randomUUID(),
           );
@@ -177,7 +180,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
   }
 
   public async listIssueTags(issue: IssueSelector, requested: PageRequest): Promise<PageSlice<TagSummary>> {
-    const raw = await this.#http.getJson<TagDto[]>(`${issueKey(issue)}/tags`, {
+    const raw = await this.#http.getJson<TagDto[]>(`${issuePath(issue)}/tags`, {
       fields: TAG_FIELDS,
       $skip: requested.skip,
       $top: requested.top + 1,
@@ -237,5 +240,41 @@ export class RestYouTrackGateway implements YouTrackGateway {
     if (!query.includeBanned) users = users.filter((user) => user.banned !== true);
     if (selector?.key === "email") users = users.filter((user) => user.email === selector.value);
     return { items: users.slice(0, query.page.top), hasMore: raw.length > query.page.top };
+  }
+
+  public async createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt> {
+    const raw = await this.#http.requestJson<IssueDto>({
+      method: "POST",
+      path: "issues",
+      query: { fields: "id,idReadable" },
+      requestId: randomUUID(),
+      body: {
+        project: { id: command.projectId },
+        summary: command.summary,
+        description: command.description,
+        ...(command.customFields.length === 0 ? {} : { customFields: command.customFields }),
+      },
+    });
+    return {
+      issueId: typeof raw.id === "string" ? raw.id : "",
+      issueIdReadable: typeof raw.idReadable === "string" ? raw.idReadable : null,
+    };
+  }
+
+  public async updateIssue(
+    issue: IssueSelector,
+    command: UpdateIssueCommand,
+  ): Promise<MutationWriteReceipt> {
+    const raw = await this.#http.requestJson<IssueDto>({
+      method: "POST",
+      path: issuePath(issue),
+      query: { fields: "id,idReadable" },
+      requestId: randomUUID(),
+      body: command,
+    });
+    return {
+      issueId: typeof raw.id === "string" ? raw.id : getSelectorEntry(issue, ["id", "idReadable"]).value,
+      issueIdReadable: typeof raw.idReadable === "string" ? raw.idReadable : null,
+    };
   }
 }

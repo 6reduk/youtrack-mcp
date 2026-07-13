@@ -3,6 +3,7 @@ import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../..
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../../../src/domain/links.js";
 import type { FieldDefinition, ProjectSummary } from "../../../src/domain/project-schema.js";
 import type {
+  CreateIssueCommand,
   ConnectionConfigReader,
   ConnectionConfigView,
   IdGenerator,
@@ -18,6 +19,8 @@ import type {
   TagListQuery,
   UserListQuery,
   YouTrackGateway,
+  MutationWriteReceipt,
+  UpdateIssueCommand,
 } from "../../../src/application/ports.js";
 
 export const PROJECT_A: ProjectSummary = {
@@ -199,6 +202,17 @@ export class FakeGateway implements YouTrackGateway {
     this.lastUserListQuery = query;
     return Promise.resolve(this.users);
   }
+
+  public createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt> {
+    void command;
+    return Promise.reject(new Error("FakeGateway createIssue is not configured"));
+  }
+
+  public updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt> {
+    void issue;
+    void command;
+    return Promise.reject(new Error("FakeGateway updateIssue is not configured"));
+  }
 }
 
 class SequenceIds implements IdGenerator {
@@ -232,7 +246,7 @@ const NULL_LOGGER: LoggerPort = {
   debug: () => undefined,
 };
 
-export function createReadContext(gateway = new FakeGateway()): ReadContext {
+export function createReadContext(gateway: YouTrackGateway = new FakeGateway()): ReadContext {
   return {
     gateway,
     connectionConfig: new FakeConnectionConfig(),

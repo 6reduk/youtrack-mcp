@@ -14,8 +14,10 @@ const logger: LoggerPort = {
   debug: () => undefined,
 };
 
-void test("admin discovery records provenance and does not claim nested values complete", async () => {
-  await withHttpServer(() => ({ body: JSON.stringify([PROJECT_FIELD_DTO]) }), async (baseUrl, requests) => {
+void test("admin discovery paginates allowed values before claiming completeness", async () => {
+  await withHttpServer((request) => request.url.includes("/bundle/values?")
+    ? { body: JSON.stringify(PROJECT_FIELD_DTO.bundle.values) }
+    : { body: JSON.stringify([PROJECT_FIELD_DTO]) }, async (baseUrl, requests) => {
     const config: RuntimeConfig = {
       baseUrl, token: new SecretValue("schema-secret"), requestTimeoutMs: 1_000,
       logLevel: "error", insecureHttpAllowed: true,
@@ -33,7 +35,7 @@ void test("admin discovery records provenance and does not claim nested values c
     assert.ok(field);
     assert.equal(field.name, "Arbitrary phase label");
     assert.equal(field.writability, "unknown");
-    assert.equal(field.valuesComplete, false);
+    assert.equal(field.valuesComplete, true);
     const url = new URL(requests[0]?.url ?? "", baseUrl);
     assert.equal(url.searchParams.get("$top"), "100");
   });

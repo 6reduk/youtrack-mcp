@@ -47,12 +47,14 @@ export interface ProjectFieldDto {
   readonly $type?: unknown;
   readonly canBeEmpty?: unknown;
   readonly isPublic?: unknown;
+  readonly defaultValues?: readonly unknown[] | null;
   readonly field?: {
     readonly id?: unknown;
     readonly name?: unknown;
     readonly fieldType?: { readonly id?: unknown; readonly valueType?: unknown } | null;
   } | null;
   readonly bundle?: {
+    readonly id?: unknown;
     readonly values?: readonly AllowedValueDto[];
     readonly aggregatedUsers?: readonly UserDto[];
   } | null;

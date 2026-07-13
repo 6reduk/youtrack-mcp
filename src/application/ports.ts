@@ -3,6 +3,31 @@ import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../do
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../domain/links.js";
 import type { FieldDefinition, ProjectSummary, SchemaSource } from "../domain/project-schema.js";
 
+export interface SerializedCustomFieldChange {
+  readonly id: string;
+  readonly name: string;
+  readonly $type: string;
+  readonly value: unknown;
+}
+
+export interface CreateIssueCommand {
+  readonly projectId: string;
+  readonly summary: string;
+  readonly description: string;
+  readonly customFields: readonly SerializedCustomFieldChange[];
+}
+
+export interface UpdateIssueCommand {
+  readonly summary?: string;
+  readonly description?: string | null;
+  readonly customFields?: readonly SerializedCustomFieldChange[];
+}
+
+export interface MutationWriteReceipt {
+  readonly issueId: string;
+  readonly issueIdReadable: string | null;
+}
+
 export interface PageSlice<T> {
   readonly items: readonly T[];
   readonly hasMore: boolean;
@@ -81,6 +106,8 @@ export interface YouTrackGateway {
   listLinkTypes(page: PageRequest): Promise<PageSlice<LinkTypeDefinition>>;
   listRelatedIssues(query: RelatedIssuesQuery): Promise<PageSlice<IssueReference>>;
   findUsers(query: UserListQuery): Promise<PageSlice<UserSummary>>;
+  createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt>;
+  updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt>;
 }
 
 export interface ConnectionConfigReader {
@@ -104,6 +131,8 @@ export interface ReadContext {
   readonly ids: IdGenerator;
   readonly logger: LoggerPort;
 }
+
+export type MutationContext = ReadContext;
 
 export interface FindUsersInput {
   readonly selector?: UserSelector;

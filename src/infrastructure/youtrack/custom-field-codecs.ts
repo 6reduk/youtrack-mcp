@@ -28,8 +28,10 @@ export function valueShapeFor(valueType: string | null): FieldValueShape {
     case "integer":
     case "float":
     case "boolean":
+    case "text":
       return "scalar";
     case "date":
+    case "date and time":
       return "date";
     case "period":
       return "period";
@@ -40,6 +42,7 @@ export function valueShapeFor(valueType: string | null): FieldValueShape {
     case "version":
     case "ownedfield":
     case "build":
+    case "group":
       return "entity";
     default:
       return "unknown";

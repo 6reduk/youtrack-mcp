@@ -101,18 +101,25 @@ export function mapProjectField(
   dto: ProjectFieldDto,
   source: SchemaSourceKind,
   valuesComplete: boolean,
+  allowedValueOverride?: readonly AllowedValueDto[],
 ): FieldDefinition {
   const valueType = optionalString(dto.field?.fieldType?.valueType);
   const rawType = optionalString(dto.$type);
-  const values = dto.bundle?.values ?? dto.bundle?.aggregatedUsers ?? [];
+  const fieldType = optionalString(dto.field?.fieldType?.id);
+  const values = allowedValueOverride ?? dto.bundle?.values ?? dto.bundle?.aggregatedUsers ?? [];
   return {
     id: requiredString(dto.id, "project custom field id"),
     name: requiredString(dto.field?.name, "project custom field name"),
-    fieldType: optionalString(dto.field?.fieldType?.id) ?? rawType ?? "unknown",
+    fieldType: fieldType ?? rawType ?? "unknown",
     valueType,
     valueShape: valueShapeFor(valueType),
-    cardinality: rawType?.includes("Multi") === true ? "multi" : rawType?.includes("Single") === true ? "single" : "unknown",
+    cardinality: fieldType?.endsWith("[*]") === true
+      ? "multi"
+      : fieldType?.endsWith("[1]") === true || (fieldType !== null && !fieldType.includes("["))
+        ? "single"
+        : "unknown",
     required: typeof dto.canBeEmpty === "boolean" ? !dto.canBeEmpty : null,
+    hasDefaultValue: Array.isArray(dto.defaultValues) ? dto.defaultValues.length > 0 : null,
     writability: "unknown",
     valuesComplete,
     allowedValues: values.map(allowedValue),
