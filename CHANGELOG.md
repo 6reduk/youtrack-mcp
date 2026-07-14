@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-07-14
 
 - Universal project/schema discovery and exact issue, link, tag, user, and project reads.
 - Verified single-issue, custom-field, state, assignee, link, hierarchy, and tag mutations.
