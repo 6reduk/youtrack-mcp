@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "youtrack": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@6reduk/youtrack-mcp@0.1.0"],
+      "env": {
+        "YOUTRACK_URL": "${YOUTRACK_URL}",
+        "YOUTRACK_TOKEN": "${YOUTRACK_TOKEN}"
+      }
+    }
+  }
+}

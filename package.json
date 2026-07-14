@@ -2,12 +2,21 @@
   "name": "@6reduk/youtrack-mcp",
   "version": "0.1.0",
   "description": "Universal schema-driven MCP server for safe atomic YouTrack operations",
+  "keywords": ["youtrack", "mcp", "model-context-protocol", "codex", "claude", "kimi"],
+  "author": "6reduk",
+  "homepage": "https://github.com/6reduk/youtrack-mcp#readme",
+  "bugs": { "url": "https://github.com/6reduk/youtrack-mcp/issues" },
   "type": "module",
   "bin": {
     "youtrack-mcp": "dist/cli.js"
   },
   "files": [
     "dist",
+    "docs",
+    "examples",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -23,7 +32,10 @@
     "scan": "node scripts/check-forbidden-constants.mjs && node scripts/check-secrets.mjs",
     "test:live:mutations": "node --import tsx --test \"test/live/mutations/**/*.test.ts\"",
     "live:mutation:manifest": "node scripts/print-live-mutation-manifest.mjs",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run build && npm run scan"
+    "pack:check": "node scripts/check-tarball.mjs",
+    "smoke:packed": "node scripts/smoke-packed.mjs",
+    "prepack": "npm run build && npm run scan",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build && npm run scan && npm run pack:check"
   },
   "repository": {
     "type": "git",

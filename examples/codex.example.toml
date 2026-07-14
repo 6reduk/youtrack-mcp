@@ -1,0 +1,7 @@
+[mcp_servers.youtrack]
+command = "npx"
+args = ["-y", "@6reduk/youtrack-mcp@0.1.0"]
+env_vars = ["YOUTRACK_URL", "YOUTRACK_TOKEN"]
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+default_tools_approval_mode = "writes"

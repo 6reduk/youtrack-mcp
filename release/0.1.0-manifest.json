@@ -1,0 +1,17 @@
+{
+  "package": "@6reduk/youtrack-mcp",
+  "version": "0.1.0",
+  "filename": "6reduk-youtrack-mcp-0.1.0.tgz",
+  "sha256": "f363bb09c18e30ea7af12e667618631421d945834230cb7d5f183aa4295d58f0",
+  "npmShasum": "39f8448dbc60bda3c3bca549e8be71e80d2a9a94",
+  "npmIntegrity": "sha512-b10AvD6cxFh18wCtoywr3EYU6trttsyMa9UKG5ui39nnDbqc3/VQLoIGSi+gulhVRYvU9xTg1m9GOMRKiGU67Q==",
+  "packedBytes": 73915,
+  "unpackedBytes": 379051,
+  "entryCount": 212,
+  "verification": {
+    "npmRunVerify": "passed",
+    "cleanInstall": "passed",
+    "stdioInitialize": "passed",
+    "liveMutations": "not_run"
+  }
+}

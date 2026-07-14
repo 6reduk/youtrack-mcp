@@ -1,0 +1,29 @@
+name: Release npm package
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm_publish:
+        description: Type PUBLISH to authorize npm publication
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: inputs.npm_publish == 'PUBLISH'
+    environment: npm-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run verify
+      - run: npm pack
+      - run: npm run smoke:packed -- ./6reduk-youtrack-mcp-*.tgz
+      - run: npm publish ./6reduk-youtrack-mcp-*.tgz --access public --provenance
