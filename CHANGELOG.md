@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-07-14
+
+- Make the packed smoke test independent of the current package version.
+- Move GitHub Actions to their Node.js 24-based major versions.
+
 ## 0.1.1 - 2026-07-14
 
 - Configure token-free npm Trusted Publishing through the protected GitHub Actions release workflow.

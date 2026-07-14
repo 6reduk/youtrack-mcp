@@ -1,6 +1,6 @@
 {
   "name": "@6reduk/youtrack-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Universal schema-driven MCP server for safe atomic YouTrack operations",
   "keywords": ["youtrack", "mcp", "model-context-protocol", "codex", "claude", "kimi"],
   "author": "6reduk",
