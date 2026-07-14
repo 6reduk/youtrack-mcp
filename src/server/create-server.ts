@@ -28,7 +28,7 @@ export function createReadContext(config: RuntimeConfig, logger: LoggerPort): Re
 }
 
 export function createServer(context: ReadContext): McpServer {
-  const server = new McpServer({ name: "youtrack-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "youtrack-mcp", version: "0.1.1" });
   registerReadTools(server, context);
   registerMutationTools(server, context);
   return server;

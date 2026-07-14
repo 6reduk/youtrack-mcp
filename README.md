@@ -11,7 +11,7 @@ Universal, schema-driven MCP server for YouTrack. It exposes neutral read and mu
 ## Run
 
 ```bash
-npx -y @6reduk/youtrack-mcp@0.1.0
+npx -y @6reduk/youtrack-mcp@0.1.1
 ```
 
 The process uses stdio for MCP and writes diagnostics only to stderr. It accepts no CLI arguments.
@@ -42,7 +42,7 @@ See [tools](docs/tools.md), [safety](docs/safety.md), and [testing](docs/testing
 npm ci
 npm run verify
 npm pack
-npm run smoke:packed -- ./6reduk-youtrack-mcp-0.1.0.tgz
+npm run smoke:packed -- ./6reduk-youtrack-mcp-0.1.1.tgz
 ```
 
 Live mutation tests are disabled and deliberately stop before network writes until an exact call manifest receives separate approval.
