@@ -4,11 +4,11 @@
 2. Run `npm ci` and `npm run verify` on Node.js 22 and 24.
 3. Run `npm pack`, record its SHA-256 checksum, and run `npm run smoke:packed -- <tarball>`.
 4. Review package contents and examples for credentials.
-5. Commit and push only with explicit approval.
-6. Create an annotated version tag and GitHub Release only with explicit approval.
-7. Run the protected manual release workflow or `npm publish <tarball> --access public` only with explicit npm approval.
+5. Commit changes on a non-`main` branch until they are intended for release.
+6. Bump `package.json`, lockfile, changelog, and MCP server version before merging or pushing to `main`.
+7. Push to `main`; the protected release environment verifies, tags, publishes through npm OIDC, and creates the GitHub Release.
 
-The release workflow uses `workflow_dispatch`; merging to `main` cannot publish a package.
+`main` is release-only. Every new commit on `main` must carry an unpublished package version. Development, experiments, and non-publishing validation use other branches.
 
 ## npm trusted publishing
 
@@ -21,4 +21,4 @@ After the initial manual package publication, configure the package's npm Truste
 - environment: `npm-release`;
 - allowed action: `npm publish`.
 
-The workflow requires the exact SemVer input, checks out `v<version>`, verifies that `package.json` matches, and publishes through OIDC. No npm write token is stored in GitHub. After OIDC is proven, set npm Publishing access to disallow traditional tokens and revoke obsolete write tokens.
+The workflow derives the exact SemVer from `package.json`, rejects reused versions/tags, runs the complete verification and packed handshake, creates `v<version>`, and publishes through OIDC. It then creates a GitHub Release with the tarball and SHA-256. No npm write token is stored in GitHub. After OIDC is proven, set npm Publishing access to disallow traditional tokens and revoke obsolete write tokens.
