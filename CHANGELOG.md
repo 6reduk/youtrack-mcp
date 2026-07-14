@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2026-07-14
+
+- Document the complete contributor workflow for versioning and automatic releases from `main`.
+
 ## 0.1.2 - 2026-07-14
 
 - Make the packed smoke test independent of the current package version.
