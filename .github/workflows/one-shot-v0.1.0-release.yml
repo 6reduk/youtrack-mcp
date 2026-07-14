@@ -1,0 +1,38 @@
+name: Create v0.1.0 GitHub Release
+
+on:
+  push:
+    branches: [automation/create-v0.1.0-release]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0.1.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npm pack
+      - name: Create release checksum
+        shell: bash
+        run: |
+          actual="$(sha256sum 6reduk-youtrack-mcp-0.1.0.tgz | cut -d' ' -f1)"
+          printf '%s  %s\n' "$actual" '6reduk-youtrack-mcp-0.1.0.tgz' > 6reduk-youtrack-mcp-0.1.0.tgz.sha256
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create v0.1.0
+          6reduk-youtrack-mcp-0.1.0.tgz
+          6reduk-youtrack-mcp-0.1.0.tgz.sha256
+          --verify-tag
+          --title "v0.1.0"
+          --generate-notes
