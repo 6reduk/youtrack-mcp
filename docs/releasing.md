@@ -9,3 +9,16 @@
 7. Run the protected manual release workflow or `npm publish <tarball> --access public` only with explicit npm approval.
 
 The release workflow uses `workflow_dispatch`; merging to `main` cannot publish a package.
+
+## npm trusted publishing
+
+After the initial manual package publication, configure the package's npm Trusted Publisher with:
+
+- provider: GitHub Actions;
+- organization or user: `6reduk`;
+- repository: `youtrack-mcp`;
+- workflow filename: `release.yml`;
+- environment: `npm-release`;
+- allowed action: `npm publish`.
+
+The workflow requires the exact SemVer input, checks out `v<version>`, verifies that `package.json` matches, and publishes through OIDC. No npm write token is stored in GitHub. After OIDC is proven, set npm Publishing access to disallow traditional tokens and revoke obsolete write tokens.
