@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 - 2026-07-15
+
+- Add one cross-platform version-bump command with consistency checks, regression coverage, and release documentation for macOS, Linux, and Windows.
+
 ## 0.1.5 - 2026-07-15
 
 - Fall back to the official read-only Hub project-team API on pre-2026.1 YouTrack servers and report effective-user, direct-group, membership, role, and schema completeness explicitly.

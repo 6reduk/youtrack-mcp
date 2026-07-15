@@ -1,11 +1,17 @@
 # Releasing
 
-1. Update version and changelog using SemVer.
+1. Keep pending release notes under `## Unreleased` in `CHANGELOG.md`, then bump every release reference with one cross-platform command:
+
+   ```bash
+   npm run version:bump -- patch
+   ```
+
+   Use `minor`, `major`, or an explicit stable SemVer such as `0.2.0` instead of `patch` when appropriate. The command works unchanged in macOS/Linux shells, Windows PowerShell, and `cmd.exe` because npm launches a Node.js script. Use `--dry-run` to preview and `--date YYYY-MM-DD` to override the local release date.
 2. Run `npm ci` and `npm run verify` on Node.js 22 and 24.
 3. Run `npm pack`, record its SHA-256 checksum, and run `npm run smoke:packed -- <tarball>`.
 4. Review package contents and examples for credentials.
 5. Commit changes on a non-`main` branch until they are intended for release.
-6. Bump `package.json`, lockfile, changelog, and MCP server version before merging or pushing to `main`.
+6. Confirm `npm run version:check` succeeds before merging or pushing to `main`. It verifies `package.json`, the lockfile, changelog, MCP server metadata, README, and all client examples use the same version.
 7. Push to `main`; the protected release environment verifies, tags, publishes through npm OIDC, and creates the GitHub Release.
 
 `main` is release-only. Every new commit on `main` must carry an unpublished package version. Development, experiments, and non-publishing validation use other branches.
