@@ -18,6 +18,11 @@ const READ_TOOLS = [
   "youtrack_list_subtasks",
   "youtrack_list_tags",
   "youtrack_search_issues",
+  "youtrack_list_agile_boards",
+  "youtrack_get_agile_board",
+  "youtrack_list_sprints",
+  "youtrack_get_project_team",
+  "youtrack_list_issue_activities",
 ];
 
 const MUTATION_TOOLS = [
@@ -35,7 +40,7 @@ const MUTATION_TOOLS = [
   "youtrack_update_issue",
 ];
 
-void test("stdio initialize lists exactly the approved Stage 1-7 tools", async () => {
+void test("stdio initialize lists exactly the approved tools", async () => {
   await withStdioClient({
     YOUTRACK_URL: "https://tracker.example.test/",
     YOUTRACK_TOKEN: "protocol-secret",
@@ -97,6 +102,24 @@ void test("strict input schema rejects unknown keys before a handler call", asyn
     const result = await client.callTool({
       name: "youtrack_get_connection_config",
       arguments: { token: "must-not-be-accepted" },
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent, undefined);
+  });
+});
+
+void test("agile audit schemas reject unsupported activity categories", async () => {
+  await withStdioClient({
+    YOUTRACK_URL: "https://tracker.example.test/",
+    YOUTRACK_TOKEN: "protocol-secret",
+    YOUTRACK_LOG_LEVEL: "error",
+  }, async (client) => {
+    const tools = await client.listTools();
+    const auditNames = ["youtrack_list_agile_boards", "youtrack_get_agile_board", "youtrack_list_sprints", "youtrack_get_project_team", "youtrack_list_issue_activities"];
+    assert.equal(tools.tools.filter((tool) => auditNames.includes(tool.name)).every((tool) => tool.annotations?.readOnlyHint === true), true);
+    const result = await client.callTool({
+      name: "youtrack_list_issue_activities",
+      arguments: { issue: { idReadable: "PX-17" }, categories: ["InventedCategory"] },
     });
     assert.equal(result.isError, true);
     assert.equal(result.structuredContent, undefined);

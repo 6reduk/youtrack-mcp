@@ -42,3 +42,17 @@ export const PROJECT_FIELD_DTO = {
     values: [{ id: "choice-x-id", name: "Choice X", $type: "EnumBundleElement" }],
   },
 };
+
+export const AGILE_DTO = {
+  id: "board-x-id", name: "Board X", projects: [PROJECT_DTO], owner: USER_DTO,
+  currentSprint: { id: "sprint-x-id", name: "Iteration X", $type: "Sprint" },
+  columnSettings: { field: { id: "field-column-x", name: "Workflow X", $type: "CustomField" }, columns: [{ id: "column-x", presentation: "Queue X", isResolved: false, fieldValues: [{ id: "value-x", name: "Queue X", $type: "AgileColumnFieldValue" }] }] },
+  swimlaneSettings: { enabled: true, $type: "AttributeBasedSwimlaneSettings", field: { id: "field-lane-x", name: "Lane X", $type: "CustomField" }, values: [] },
+  hideOrphansSwimlane: false, orphansAtTheTop: true,
+  sprintsSettings: { disableSprints: false, isExplicit: false, explicitQuery: "project: PX", cardOnSeveralSprints: false, hideSubtasksOfCards: true },
+  estimationField: null, originalEstimationField: null,
+  status: { valid: true, hasJobs: false, errors: [], warnings: [] },
+};
+
+export const SPRINT_DTO = { id: "sprint-x-id", name: "Iteration X", goal: "Goal X", start: 10, finish: 20, archived: false, isDefault: false };
+export const ACTIVITY_DTO = { id: "activity-x-id", $type: "CustomFieldActivityItem", timestamp: 30, author: USER_DTO, category: { id: "CustomFieldCategory" }, field: { id: "field-x-id", name: "Workflow X", $type: "CustomField" }, targetMember: "customFields", added: { id: "value-b", name: "Value B", $type: "EnumBundleElement" }, removed: { id: "value-a", name: "Value A", $type: "EnumBundleElement" } };

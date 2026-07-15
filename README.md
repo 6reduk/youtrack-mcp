@@ -2,6 +2,8 @@
 
 Universal, schema-driven MCP server for YouTrack. It exposes neutral read and mutation tools without embedding a project workflow, parent task, custom-field name, link meaning, or company-specific identifier.
 
+Read-only discovery includes agile board configuration and sprints, project-team membership, and observed issue activity history. These tools return only facts exposed by the public YouTrack REST API and never infer roles or permitted workflow transitions.
+
 ## Requirements
 
 - Node.js 22 or 24

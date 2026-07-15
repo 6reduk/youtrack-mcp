@@ -10,7 +10,7 @@ export type OperationStatus =
   | "forbidden"
   | "failed";
 
-export type TargetKind = "server" | "project" | "issue" | "user" | "tag" | "link" | "schema";
+export type TargetKind = "server" | "project" | "issue" | "user" | "tag" | "link" | "schema" | "agile_board";
 export type SafeDetailValue = string | number | boolean | null;
 
 export interface SafeTarget {

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 const roots = ["src", "dist"];
-const forbidden = [/youtrack\.fin-it\.tech/iu, /DEV-2517/u, /project-dev/iu];
+const forbidden = [/youtrack\.fin-it\.tech/iu, /DEV-2517/u, /project-dev/iu, /\bFinit\b/iu, /\bDEV\b/u, /\bIn Progress\b/iu, /\bDone\b/iu];
 const files = [];
 function walk(path) { for (const name of readdirSync(path)) { const item = join(path, name); if (statSync(item).isDirectory()) walk(item); else files.push(item); } }
 for (const root of roots) walk(root);

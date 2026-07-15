@@ -15,8 +15,13 @@ import type {
   UpdateIssueCommand,
   CreateTagCommand,
   LinkContainerReference,
+  AgileBoardListQuery,
+  SprintListQuery,
+  ProjectTeamQuery,
+  IssueActivityQuery,
 } from "../../application/ports.js";
-import { getSelectorEntry, type IssueSelector, type PageRequest, type ProjectSelector } from "../../domain/identifiers.js";
+import type { AgileBoardSelector, AgileBoardSummary, ProjectTeamMember } from "../../domain/agile-audit.js";
+import { DomainValidationError, getSelectorEntry, type IssueSelector, type PageRequest, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../../domain/issue.js";
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../../domain/links.js";
 import type { ProjectSummary } from "../../domain/project-schema.js";
@@ -28,10 +33,17 @@ import {
   PROJECT_FIELDS,
   TAG_FIELDS,
   USER_FIELDS,
+  ACTIVITY_FIELDS,
+  AGILE_DETAILS_FIELDS,
+  AGILE_LIST_FIELDS,
+  SPRINT_FIELDS,
+  TEAM_GROUP_FIELDS,
+  TEAM_USER_FIELDS,
+  ASSIGNED_ROLE_FIELDS,
 } from "../http/fields-projections.js";
 import type { YouTrackHttpClient } from "../http/youtrack-http-client.js";
-import type { IssueDto, IssueLinkDto, LinkTypeDto, ProjectDto, TagDto, UserDto } from "./dtos.js";
-import { mapIssue, mapIssueReference, mapLinkContainer, mapLinkType, mapProject, mapProjectField, mapTag, mapUser } from "./mappers.js";
+import type { ActivityDto, AgileDto, AssignedRoleDto, IssueDto, IssueLinkDto, LinkTypeDto, ProjectDto, SprintDto, TagDto, UserDto, UserGroupDto } from "./dtos.js";
+import { mapAgileBoardDetails, mapAgileBoardSummary, mapIssue, mapIssueActivity, mapIssueReference, mapLinkContainer, mapLinkType, mapProject, mapProjectField, mapProjectRole, mapProjectTeamGroup, mapSprint, mapTag, mapUser } from "./mappers.js";
 import { discoverAdminSchema } from "./schema-discovery.js";
 
 function page<T>(items: readonly T[], top: number): PageSlice<T> {
@@ -45,6 +57,11 @@ function issuePath(selector: IssueSelector): string {
 function sameProject(project: ProjectSummary, selector: ProjectSelector): boolean {
   const entry = getSelectorEntry(selector, ["id", "shortName"]);
   return project[entry.key] === entry.value;
+}
+
+function partialReadError(error: unknown): boolean {
+  return error instanceof YouTrackHttpError &&
+    (error.kind === "permission_denied" || error.kind === "upstream_not_found");
 }
 
 export class RestYouTrackGateway implements YouTrackGateway {
@@ -242,6 +259,167 @@ export class RestYouTrackGateway implements YouTrackGateway {
     if (!query.includeBanned) users = users.filter((user) => user.banned !== true);
     if (selector?.key === "email") users = users.filter((user) => user.email === selector.value);
     return { items: users.slice(0, query.page.top), hasMore: raw.length > query.page.top };
+  }
+
+  public async listAgileBoards(query: AgileBoardListQuery): Promise<PageSlice<AgileBoardSummary>> {
+    const raw = await this.#http.getJson<AgileDto[]>("agiles", {
+      fields: AGILE_LIST_FIELDS,
+      $skip: query.page.skip,
+      $top: query.page.top + 1,
+    }, randomUUID());
+    return page(raw.map((item) => mapAgileBoardSummary(item, this.#baseUrl)), query.page.top);
+  }
+
+  public async findAgileBoards(selector: AgileBoardSelector): Promise<readonly AgileBoardSummary[]> {
+    const entry = getSelectorEntry(selector, ["id", "exactName"]);
+    if (entry.key === "id") {
+      try {
+        const raw = await this.#http.getJson<AgileDto>(`agiles/${encodeURIComponent(entry.value)}`, { fields: AGILE_LIST_FIELDS }, randomUUID());
+        const board = mapAgileBoardSummary(raw, this.#baseUrl);
+        return board.id === entry.value ? [board] : [];
+      } catch (error: unknown) {
+        if (error instanceof YouTrackHttpError && error.kind === "upstream_not_found") return [];
+        throw error;
+      }
+    }
+
+    const matches: AgileBoardSummary[] = [];
+    const chunk = 100;
+    for (let skip = 0; skip <= 100_000; skip += chunk) {
+      const raw = await this.#http.getJson<AgileDto[]>("agiles", {
+        fields: AGILE_LIST_FIELDS, $skip: skip, $top: chunk,
+      }, randomUUID());
+      matches.push(...raw.map((item) => mapAgileBoardSummary(item, this.#baseUrl)).filter((board) => board.name === entry.value));
+      if (raw.length < chunk) break;
+      if (skip === 100_000) throw new DomainValidationError("Agile board exact-name resolution exceeded the bounded discovery limit");
+    }
+    return matches;
+  }
+
+  public async getAgileBoard(boardId: string): Promise<ReturnType<typeof mapAgileBoardDetails> | null> {
+    try {
+      const raw = await this.#http.getJson<AgileDto>(`agiles/${encodeURIComponent(boardId)}`, { fields: AGILE_DETAILS_FIELDS }, randomUUID());
+      return mapAgileBoardDetails(raw, this.#baseUrl);
+    } catch (error: unknown) {
+      if (error instanceof YouTrackHttpError && error.kind === "upstream_not_found") return null;
+      throw error;
+    }
+  }
+
+  public async listSprints(query: SprintListQuery): Promise<PageSlice<ReturnType<typeof mapSprint>>> {
+    const raw = await this.#http.getJson<SprintDto[]>(`agiles/${encodeURIComponent(query.boardId)}/sprints`, {
+      fields: SPRINT_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
+    }, randomUUID());
+    return page(raw.map((item) => mapSprint(item, query.currentSprintId)), query.page.top);
+  }
+
+  public async getProjectTeam(query: ProjectTeamQuery): Promise<ReturnType<YouTrackGateway["getProjectTeam"]> extends Promise<infer T> ? T : never> {
+    const path = `admin/projects/${encodeURIComponent(query.project.id)}/team`;
+    const usersRaw = await this.#http.getJson<UserDto[]>(`${path}/users`, {
+      fields: TEAM_USER_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
+    }, randomUUID());
+    const warnings: string[] = [];
+    const directIds = new Set<string>();
+    try {
+      const chunk = 100;
+      for (let skip = 0; skip <= 10_000; skip += chunk) {
+        const ownRaw = await this.#http.getJson<UserDto[]>(`${path}/ownUsers`, { fields: "id", $skip: skip, $top: chunk }, randomUUID());
+        for (const user of ownRaw) if (typeof user.id === "string") directIds.add(user.id);
+        if (ownRaw.length < chunk) break;
+        if (skip === 10_000) warnings.push("Direct membership enumeration reached its safety bound; some membership values may be unknown.");
+      }
+    } catch (error: unknown) {
+      if (!partialReadError(error)) throw error;
+      warnings.push("Direct membership is unavailable with the current YouTrack version or permissions.");
+    }
+
+    let groupsRaw: readonly UserGroupDto[] = [];
+    let groupsHasMore = false;
+    try {
+      const raw = await this.#http.getJson<UserGroupDto[]>(`${path}/groups`, {
+        fields: TEAM_GROUP_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
+      }, randomUUID());
+      groupsRaw = raw.slice(0, query.page.top);
+      groupsHasMore = raw.length > query.page.top;
+    } catch (error: unknown) {
+      if (!partialReadError(error)) throw error;
+      warnings.push("Project team groups are unavailable with the current YouTrack version or permissions.");
+    }
+
+    const directKnown = warnings.every((warning) => !warning.startsWith("Direct membership"));
+    const users: ProjectTeamMember[] = usersRaw.slice(0, query.page.top).map((user) => {
+      const mapped = mapUser(user);
+      return { ...mapped, membership: directKnown ? (directIds.has(mapped.id) ? "direct" : "via_group") : "unknown", roles: [] };
+    });
+    const groups = groupsRaw.map(mapProjectTeamGroup);
+    let rolesAvailable = true;
+    let teamRoles: ReturnType<typeof mapProjectRole>[] | null = null;
+    const roleMap = new Map<string, ReturnType<typeof mapProjectRole>[] | null>();
+    let teamId: string | null = null;
+    try {
+      const team = await this.#http.getJson<{ readonly id?: unknown }>(path, { fields: "id" }, randomUUID());
+      teamId = typeof team.id === "string" ? team.id : null;
+      if (teamId === null) rolesAvailable = false;
+    } catch (error: unknown) {
+      if (!partialReadError(error)) throw error;
+      rolesAvailable = false;
+    }
+    for (const holderId of [...users.map((user) => user.id), ...groups.map((group) => group.id), ...(teamId === null ? [] : [teamId])]) {
+      try {
+        const assigned = await this.#http.getJson<AssignedRoleDto[]>("assignedRoles", {
+          fields: ASSIGNED_ROLE_FIELDS, query: `holder:${holderId}`, $skip: 0, $top: 101,
+        }, randomUUID());
+        if (assigned.length > 100) warnings.push(`Role assignments for holder ${holderId} reached the safety bound and were truncated.`);
+        const roles = assigned.slice(0, 100)
+          .filter((item) => item.holder?.id === holderId && item.scope?.project?.id === query.project.id)
+          .map(mapProjectRole);
+        roleMap.set(holderId, roles);
+      } catch (error: unknown) {
+        if (!partialReadError(error)) throw error;
+        rolesAvailable = false;
+        roleMap.set(holderId, null);
+        break;
+      }
+    }
+    if (!rolesAvailable) warnings.push("Project-scoped role assignments are partially unavailable; reading assigned roles can require Update Project permission and YouTrack 2026.1 or newer.");
+    warnings.push("The public project-team API does not expose job titles; no job title is inferred from role assignments.");
+    for (let index = 0; index < users.length; index += 1) {
+      const user = users[index];
+      if (user !== undefined) users[index] = { ...user, roles: roleMap.get(user.id) ?? null };
+    }
+    for (let index = 0; index < groups.length; index += 1) {
+      const group = groups[index];
+      if (group !== undefined) groups[index] = { ...group, roles: roleMap.get(group.id) ?? null };
+    }
+    if (teamId !== null) teamRoles = roleMap.get(teamId) ?? null;
+    return {
+      project: query.project,
+      users,
+      groups,
+      usersPage: { skip: query.page.skip, requestedTop: query.page.top, returned: users.length, hasMore: usersRaw.length > query.page.top },
+      groupsPage: { skip: query.page.skip, requestedTop: query.page.top, returned: groupsRaw.length, hasMore: groupsHasMore },
+      teamRoles,
+      rolesAvailable,
+      warnings,
+    };
+  }
+
+  public async listIssueActivities(query: IssueActivityQuery): Promise<PageSlice<ReturnType<typeof mapIssueActivity>>> {
+    const raw = await this.#http.getJson<ActivityDto[]>(`${issuePath(query.issue)}/activities`, {
+      fields: ACTIVITY_FIELDS,
+      categories: query.categories.join(","),
+      reverse: query.reverse,
+      $skip: query.page.skip,
+      $top: query.page.top + 1,
+      ...(query.start === undefined ? {} : { start: query.start }),
+      ...(query.end === undefined ? {} : { end: query.end }),
+    }, randomUUID());
+    const mapped = raw.map(mapIssueActivity);
+    const filtered = query.fieldNames.length === 0 ? mapped : mapped.filter((item) => {
+      const fieldName = item.field?.name;
+      return fieldName != null && query.fieldNames.includes(fieldName);
+    });
+    return { items: filtered.slice(0, query.page.top), hasMore: raw.length > query.page.top };
   }
 
   public async createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt> {

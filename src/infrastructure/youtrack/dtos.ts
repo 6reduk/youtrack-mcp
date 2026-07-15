@@ -93,3 +93,27 @@ export interface IssueDto extends IssueReferenceDto {
   readonly tags?: readonly TagDto[];
   readonly links?: readonly IssueLinkDto[];
 }
+
+export interface EntityValueDto {
+  readonly id?: unknown;
+  readonly name?: unknown;
+  readonly login?: unknown;
+  readonly idReadable?: unknown;
+  readonly $type?: unknown;
+}
+
+export interface AgileDto {
+  readonly id?: unknown; readonly name?: unknown; readonly projects?: readonly ProjectDto[];
+  readonly owner?: UserDto | null; readonly currentSprint?: EntityValueDto | null;
+  readonly columnSettings?: { readonly field?: EntityValueDto | null; readonly columns?: readonly { readonly id?: unknown; readonly presentation?: unknown; readonly isResolved?: unknown; readonly wipLimit?: { readonly min?: unknown; readonly max?: unknown } | null; readonly fieldValues?: readonly EntityValueDto[] }[] } | null;
+  readonly swimlaneSettings?: { readonly enabled?: unknown; readonly $type?: unknown; readonly field?: EntityValueDto | null; readonly values?: readonly EntityValueDto[] } | null;
+  readonly hideOrphansSwimlane?: unknown; readonly orphansAtTheTop?: unknown;
+  readonly sprintsSettings?: { readonly disableSprints?: unknown; readonly isExplicit?: unknown; readonly explicitQuery?: unknown; readonly cardOnSeveralSprints?: unknown; readonly sprintSyncField?: EntityValueDto | null; readonly defaultSprint?: EntityValueDto | null; readonly hideSubtasksOfCards?: unknown } | null;
+  readonly estimationField?: EntityValueDto | null; readonly originalEstimationField?: EntityValueDto | null;
+  readonly status?: { readonly valid?: unknown; readonly hasJobs?: unknown; readonly errors?: unknown; readonly warnings?: unknown } | null;
+}
+
+export interface SprintDto { readonly id?: unknown; readonly name?: unknown; readonly goal?: unknown; readonly start?: unknown; readonly finish?: unknown; readonly archived?: unknown; readonly isDefault?: unknown; }
+export interface UserGroupDto { readonly id?: unknown; readonly name?: unknown; readonly ringId?: unknown; readonly usersCount?: unknown; readonly allUsersGroup?: unknown; }
+export interface ActivityDto { readonly id?: unknown; readonly $type?: unknown; readonly timestamp?: unknown; readonly author?: UserDto | null; readonly category?: { readonly id?: unknown } | null; readonly field?: EntityValueDto | null; readonly targetMember?: unknown; readonly added?: unknown; readonly removed?: unknown; }
+export interface AssignedRoleDto { readonly id?: unknown; readonly role?: { readonly id?: unknown; readonly name?: unknown; readonly description?: unknown } | null; readonly holder?: { readonly id?: unknown; readonly $type?: unknown } | null; readonly scope?: { readonly id?: unknown; readonly $type?: unknown; readonly project?: { readonly id?: unknown } | null } | null; }

@@ -2,6 +2,7 @@ import type { IssueSelector, PageRequest, ProjectSelector } from "../../../src/d
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../../../src/domain/issue.js";
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../../../src/domain/links.js";
 import type { FieldDefinition, ProjectSummary } from "../../../src/domain/project-schema.js";
+import type { AgileBoardDetails, AgileBoardSelector, AgileBoardSummary, IssueActivitySummary, ProjectTeamSnapshot, SprintSummary } from "../../../src/domain/agile-audit.js";
 import type {
   CreateIssueCommand,
   ConnectionConfigReader,
@@ -23,6 +24,10 @@ import type {
   UpdateIssueCommand,
   CreateTagCommand,
   LinkContainerReference,
+  AgileBoardListQuery,
+  SprintListQuery,
+  ProjectTeamQuery,
+  IssueActivityQuery,
 } from "../../../src/application/ports.js";
 
 export const PROJECT_A: ProjectSummary = {
@@ -97,6 +102,18 @@ export const ISSUE_REFERENCE_A: IssueReference = {
   url: ISSUE_A.url,
 };
 
+export const BOARD_A: AgileBoardDetails = {
+  id: "board-a-id", name: "Alpha board", projects: [PROJECT_A], archived: null, available: true,
+  url: "https://tracker.example.test/agiles/board-a-id", owner: USER_A,
+  columnField: { id: "field-column-id", name: "Arbitrary column", login: null, idReadable: null, type: "CustomField" },
+  columns: [], swimlanes: null, orphanSwimlane: { hidden: false, atTop: false },
+  sprintSettings: null, currentSprint: { id: "sprint-a-id", name: "Iteration A", login: null, idReadable: null, type: "Sprint" },
+  estimationField: null, originalEstimationField: null, cardFields: null,
+  status: { valid: true, hasJobs: false, errors: [], warnings: [] },
+};
+export const SPRINT_A: SprintSummary = { id: "sprint-a-id", name: "Iteration A", goal: null, startAt: 1, finishAt: 2, archived: false, current: true, isDefault: false };
+export const ACTIVITY_A: IssueActivitySummary = { id: "activity-a-id", type: "CustomFieldActivityItem", category: "CustomFieldCategory", timestamp: 3, author: USER_A, field: { id: "field-a-id", name: "Arbitrary A", login: null, idReadable: null, type: "CustomField" }, targetMember: "customFields", added: { id: "value-a", name: "Value A", login: null, idReadable: null, type: "EnumBundleElement" }, removed: null };
+
 export class FakeGateway implements YouTrackGateway {
   public serverFacts: ServerFacts = {
     baseUrl: "https://tracker.example.test/",
@@ -121,6 +138,10 @@ export class FakeGateway implements YouTrackGateway {
     hasMore: false,
   };
   public users: PageSlice<UserSummary> = { items: [USER_A], hasMore: false };
+  public boards: PageSlice<AgileBoardSummary> = { items: [BOARD_A], hasMore: false };
+  public board: AgileBoardDetails | null = BOARD_A;
+  public sprints: PageSlice<SprintSummary> = { items: [SPRINT_A], hasMore: false };
+  public activities: PageSlice<IssueActivitySummary> = { items: [ACTIVITY_A], hasMore: false };
   public lastProjectListQuery: ProjectListQuery | null = null;
   public lastSearchQuery: IssueSearchQuery | null = null;
   public lastRelatedQuery: RelatedIssuesQuery | null = null;
@@ -204,6 +225,13 @@ export class FakeGateway implements YouTrackGateway {
     this.lastUserListQuery = query;
     return Promise.resolve(this.users);
   }
+
+  public listAgileBoards(query: AgileBoardListQuery): Promise<PageSlice<AgileBoardSummary>> { void query; return Promise.resolve(this.boards); }
+  public findAgileBoards(selector: AgileBoardSelector): Promise<readonly AgileBoardSummary[]> { void selector; return Promise.resolve(this.boards.items); }
+  public getAgileBoard(boardId: string): Promise<AgileBoardDetails | null> { void boardId; return Promise.resolve(this.board); }
+  public listSprints(query: SprintListQuery): Promise<PageSlice<SprintSummary>> { void query; return Promise.resolve(this.sprints); }
+  public getProjectTeam(query: ProjectTeamQuery): Promise<ProjectTeamSnapshot> { return Promise.resolve({ project: query.project, users: [{ ...USER_A, membership: "direct", roles: [] }], groups: [], usersPage: { skip: query.page.skip, requestedTop: query.page.top, returned: 1, hasMore: false }, groupsPage: { skip: query.page.skip, requestedTop: query.page.top, returned: 0, hasMore: false }, teamRoles: [], rolesAvailable: true, warnings: [] }); }
+  public listIssueActivities(query: IssueActivityQuery): Promise<PageSlice<IssueActivitySummary>> { void query; return Promise.resolve(this.activities); }
 
   public createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt> {
     void command;

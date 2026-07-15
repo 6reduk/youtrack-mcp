@@ -13,8 +13,14 @@ import { listProjects } from "../application/reads/list-projects.js";
 import { listSubtasks } from "../application/reads/list-subtasks.js";
 import { listTags } from "../application/reads/list-tags.js";
 import { searchIssues } from "../application/reads/search-issues.js";
+import { getAgileBoard } from "../application/reads/get-agile-board.js";
+import { getProjectTeam } from "../application/reads/get-project-team.js";
+import { listAgileBoards } from "../application/reads/list-agile-boards.js";
+import { listIssueActivities } from "../application/reads/list-issue-activities.js";
+import { listSprints } from "../application/reads/list-sprints.js";
 import type { ReadContext } from "../application/ports.js";
 import { createPageRequest } from "../domain/identifiers.js";
+import { ISSUE_ACTIVITY_CATEGORIES } from "../domain/agile-audit.js";
 import type { OperationResult } from "../domain/operation-result.js";
 import { presentResult, presentSafeFailure } from "./result-presenter.js";
 
@@ -32,6 +38,10 @@ const userSelector = z.union([
   z.strictObject({ email: z.email() }),
 ]);
 const linkTypeSelector = z.union([
+  z.strictObject({ id: z.string().trim().min(1) }),
+  z.strictObject({ exactName: z.string().trim().min(1) }),
+]);
+const agileBoardSelector = z.union([
   z.strictObject({ id: z.string().trim().min(1) }),
   z.strictObject({ exactName: z.string().trim().min(1) }),
 ]);
@@ -90,4 +100,25 @@ export function registerReadTools(server: McpServer, context: ReadContext): void
   register(server, context, "youtrack_find_users", "Find visible users by exact selector or discovery query.", z.strictObject({
     ...pageShape, selector: userSelector.optional(), query: z.string().trim().min(1).max(500).optional(), includeBanned: z.boolean().default(true),
   }), (input) => findUsers(context, { page: createPageRequest(input.skip, input.top), includeBanned: input.includeBanned, ...(input.selector === undefined ? {} : { selector: input.selector }), ...(input.query === undefined ? {} : { query: input.query }) }));
+  register(server, context, "youtrack_list_agile_boards", "List visible agile boards. The official endpoint has no discovery query.", z.strictObject(pageShape),
+    (input) => listAgileBoards(context, createPageRequest(input.skip, input.top)));
+  register(server, context, "youtrack_get_agile_board", "Resolve an agile board by exact ID or exact name and read its available configuration.", z.strictObject({ board: agileBoardSelector }),
+    (input) => getAgileBoard(context, input.board));
+  register(server, context, "youtrack_list_sprints", "List sprints for one exactly resolved agile board.", z.strictObject({ board: agileBoardSelector, ...pageShape }),
+    (input) => listSprints(context, input.board, createPageRequest(input.skip, input.top)));
+  register(server, context, "youtrack_get_project_team", "Read visible effective users and direct groups in an exactly resolved project team.", z.strictObject({ project: projectSelector, ...pageShape }),
+    (input) => getProjectTeam(context, input.project, createPageRequest(input.skip, input.top)));
+  register(server, context, "youtrack_list_issue_activities", "Read observed issue changes without inferring allowed workflow transitions.", z.strictObject({
+    issue: issueSelector,
+    ...pageShape,
+    categories: z.array(z.enum(ISSUE_ACTIVITY_CATEGORIES)).min(1).max(ISSUE_ACTIVITY_CATEGORIES.length).default([...ISSUE_ACTIVITY_CATEGORIES]),
+    fieldNames: z.array(z.string().trim().min(1).max(500)).max(50).default([]),
+    reverse: z.boolean().default(false),
+    start: z.number().int().min(0).optional(),
+    end: z.number().int().min(0).optional(),
+  }), (input) => listIssueActivities(context, {
+    issue: input.issue, page: createPageRequest(input.skip, input.top), categories: input.categories,
+    fieldNames: input.fieldNames, reverse: input.reverse,
+    ...(input.start === undefined ? {} : { start: input.start }), ...(input.end === undefined ? {} : { end: input.end }),
+  }));
 }

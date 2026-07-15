@@ -2,6 +2,15 @@ import type { IssueSelector, LinkDirection, LinkTypeSelector, PageRequest, Proje
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../domain/issue.js";
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../domain/links.js";
 import type { FieldDefinition, ProjectSummary, SchemaSource } from "../domain/project-schema.js";
+import type {
+  AgileBoardDetails,
+  AgileBoardSelector,
+  AgileBoardSummary,
+  IssueActivityCategory,
+  IssueActivitySummary,
+  ProjectTeamSnapshot,
+  SprintSummary,
+} from "../domain/agile-audit.js";
 
 export interface SerializedCustomFieldChange {
   readonly id: string;
@@ -96,6 +105,19 @@ export interface UserListQuery {
   readonly includeBanned: boolean;
 }
 
+export interface AgileBoardListQuery { readonly page: PageRequest; }
+export interface SprintListQuery { readonly boardId: string; readonly currentSprintId: string | null; readonly page: PageRequest; }
+export interface ProjectTeamQuery { readonly project: ProjectSummary; readonly page: PageRequest; }
+export interface IssueActivityQuery {
+  readonly issue: IssueSelector;
+  readonly page: PageRequest;
+  readonly categories: readonly IssueActivityCategory[];
+  readonly fieldNames: readonly string[];
+  readonly reverse: boolean;
+  readonly start?: number;
+  readonly end?: number;
+}
+
 export interface RelatedIssuesQuery {
   readonly issue: IssueSelector;
   readonly linkType: LinkTypeSelector;
@@ -117,6 +139,12 @@ export interface YouTrackGateway {
   listLinkTypes(page: PageRequest): Promise<PageSlice<LinkTypeDefinition>>;
   listRelatedIssues(query: RelatedIssuesQuery): Promise<PageSlice<IssueReference>>;
   findUsers(query: UserListQuery): Promise<PageSlice<UserSummary>>;
+  listAgileBoards(query: AgileBoardListQuery): Promise<PageSlice<AgileBoardSummary>>;
+  findAgileBoards(selector: AgileBoardSelector): Promise<readonly AgileBoardSummary[]>;
+  getAgileBoard(boardId: string): Promise<AgileBoardDetails | null>;
+  listSprints(query: SprintListQuery): Promise<PageSlice<SprintSummary>>;
+  getProjectTeam(query: ProjectTeamQuery): Promise<ProjectTeamSnapshot>;
+  listIssueActivities(query: IssueActivityQuery): Promise<PageSlice<IssueActivitySummary>>;
   createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt>;
   updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt>;
   listLinkContainers(issue: IssueSelector): Promise<readonly LinkContainerReference[]>;

@@ -1,6 +1,16 @@
 import type { IssueCustomFieldSnapshot, IssueSnapshot, TagSummary, UserSummary } from "../../domain/issue.js";
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../../domain/links.js";
 import type { AllowedValue, FieldDefinition, ProjectSummary, SchemaSourceKind } from "../../domain/project-schema.js";
+import type {
+  ActivityValue,
+  AgileBoardDetails,
+  AgileBoardSummary,
+  EntityValueSummary,
+  IssueActivitySummary,
+  ProjectTeamGroup,
+  ProjectRoleSummary,
+  SprintSummary,
+} from "../../domain/agile-audit.js";
 import { decodeReadableFieldValue, valueShapeFor } from "./custom-field-codecs.js";
 import type {
   AllowedValueDto,
@@ -13,6 +23,12 @@ import type {
   ProjectFieldDto,
   TagDto,
   UserDto,
+  ActivityDto,
+  AgileDto,
+  EntityValueDto,
+  SprintDto,
+  UserGroupDto,
+  AssignedRoleDto,
 } from "./dtos.js";
 
 function requiredString(value: unknown, label: string): string {
@@ -26,6 +42,18 @@ function optionalString(value: unknown): string | null {
 
 function optionalEpoch(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function optionalInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
+
+function stringArray(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function pageUrl(baseUrl: URL, path: string): string {
@@ -50,6 +78,130 @@ export function mapProject(dto: ProjectDto, baseUrl: URL): ProjectSummary {
     name: requiredString(dto.name, "project name"),
     archived: dto.archived === true,
     url: pageUrl(baseUrl, `projects/${encodeURIComponent(shortName)}`),
+  };
+}
+
+export function mapEntityValue(dto: EntityValueDto | null | undefined): EntityValueSummary | null {
+  if (dto == null) return null;
+  return {
+    id: optionalString(dto.id),
+    name: optionalString(dto.name),
+    login: optionalString(dto.login),
+    idReadable: optionalString(dto.idReadable),
+    type: optionalString(dto.$type),
+  };
+}
+
+export function mapAgileBoardSummary(dto: AgileDto, baseUrl: URL): AgileBoardSummary {
+  const id = requiredString(dto.id, "agile board id");
+  return {
+    id,
+    name: requiredString(dto.name, "agile board name"),
+    projects: (dto.projects ?? []).map((project) => mapProject(project, baseUrl)),
+    archived: null,
+    available: optionalBoolean(dto.status?.valid),
+    url: pageUrl(baseUrl, `agiles/${encodeURIComponent(id)}`),
+  };
+}
+
+export function mapAgileBoardDetails(dto: AgileDto, baseUrl: URL): AgileBoardDetails {
+  const summary = mapAgileBoardSummary(dto, baseUrl);
+  const columns = (dto.columnSettings?.columns ?? []).map((column) => ({
+    id: optionalString(column.id),
+    presentation: optionalString(column.presentation),
+    resolved: optionalBoolean(column.isResolved),
+    wipMin: optionalInteger(column.wipLimit?.min),
+    wipMax: optionalInteger(column.wipLimit?.max),
+    values: (column.fieldValues ?? []).map(mapEntityValue).filter((value): value is EntityValueSummary => value !== null),
+  }));
+  const swimlane = dto.swimlaneSettings;
+  const sprint = dto.sprintsSettings;
+  const status = dto.status;
+  return {
+    ...summary,
+    owner: dto.owner == null ? null : mapUser(dto.owner),
+    columnField: mapEntityValue(dto.columnSettings?.field),
+    columns,
+    swimlanes: swimlane == null ? null : {
+      enabled: optionalBoolean(swimlane.enabled),
+      type: optionalString(swimlane.$type),
+      field: mapEntityValue(swimlane.field),
+      values: (swimlane.values ?? []).map(mapEntityValue).filter((value): value is EntityValueSummary => value !== null),
+    },
+    orphanSwimlane: { hidden: optionalBoolean(dto.hideOrphansSwimlane), atTop: optionalBoolean(dto.orphansAtTheTop) },
+    sprintSettings: sprint == null ? null : {
+      disabled: optionalBoolean(sprint.disableSprints),
+      explicit: optionalBoolean(sprint.isExplicit),
+      query: optionalString(sprint.explicitQuery),
+      multipleSprints: optionalBoolean(sprint.cardOnSeveralSprints),
+      syncField: mapEntityValue(sprint.sprintSyncField),
+      defaultSprint: mapEntityValue(sprint.defaultSprint),
+      hideSubtasks: optionalBoolean(sprint.hideSubtasksOfCards),
+    },
+    currentSprint: mapEntityValue(dto.currentSprint),
+    estimationField: mapEntityValue(dto.estimationField),
+    originalEstimationField: mapEntityValue(dto.originalEstimationField),
+    cardFields: null,
+    status: status == null ? null : {
+      valid: optionalBoolean(status.valid),
+      hasJobs: optionalBoolean(status.hasJobs),
+      errors: stringArray(status.errors),
+      warnings: stringArray(status.warnings),
+    },
+  };
+}
+
+export function mapSprint(dto: SprintDto, currentSprintId: string | null): SprintSummary {
+  const id = requiredString(dto.id, "sprint id");
+  return {
+    id,
+    name: requiredString(dto.name, "sprint name"),
+    goal: optionalString(dto.goal),
+    startAt: optionalEpoch(dto.start),
+    finishAt: optionalEpoch(dto.finish),
+    archived: optionalBoolean(dto.archived),
+    current: currentSprintId === null ? null : id === currentSprintId,
+    isDefault: optionalBoolean(dto.isDefault),
+  };
+}
+
+export function mapProjectTeamGroup(dto: UserGroupDto): ProjectTeamGroup {
+  return {
+    id: requiredString(dto.id, "team group id"),
+    name: requiredString(dto.name, "team group name"),
+    ringId: optionalString(dto.ringId),
+    usersCount: optionalInteger(dto.usersCount),
+    allUsersGroup: optionalBoolean(dto.allUsersGroup),
+    roles: [],
+  };
+}
+
+export function mapProjectRole(dto: AssignedRoleDto): ProjectRoleSummary {
+  if (dto.role == null) throw new TypeError("Invalid assigned role in YouTrack response");
+  return { id: requiredString(dto.role.id, "role id"), name: requiredString(dto.role.name, "role name"), description: optionalString(dto.role.description) };
+}
+
+function mapActivityValue(value: unknown): ActivityValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean" ||
+      (typeof value === "number" && Number.isFinite(value))) return value;
+  if (Array.isArray(value)) return value.map(mapActivityValue);
+  if (typeof value === "object") return mapEntityValue(value);
+  return null;
+}
+
+export function mapIssueActivity(dto: ActivityDto): IssueActivitySummary {
+  const timestamp = optionalEpoch(dto.timestamp);
+  if (timestamp === null) throw new TypeError("Invalid activity timestamp in YouTrack response");
+  return {
+    id: requiredString(dto.id, "activity id"),
+    type: optionalString(dto.$type),
+    category: optionalString(dto.category?.id),
+    timestamp,
+    author: dto.author == null ? null : mapUser(dto.author),
+    field: mapEntityValue(dto.field),
+    targetMember: optionalString(dto.targetMember),
+    added: mapActivityValue(dto.added),
+    removed: mapActivityValue(dto.removed),
   };
 }
 

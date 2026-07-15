@@ -4,6 +4,8 @@
 
 Read-only live checks require `YOUTRACK_LIVE_READ_TESTS=1`. Mutation tests additionally require an exact sandbox project, unique `mcp-live-*` prefix, and a matching approval value. Current mutation test files intentionally stop before any network mutation.
 
+The connection and agile-board discovery live checks need only `YOUTRACK_LIVE_READ_TESTS=1`. Scoped agile audit checks additionally require `YOUTRACK_LIVE_PROJECT` (project short name), `YOUTRACK_LIVE_BOARD_ID`, and `YOUTRACK_LIVE_ISSUE` (readable issue ID). They perform GET requests only and safely skip when this live configuration is absent.
+
 Generate a secret-free plan with:
 
 ```bash

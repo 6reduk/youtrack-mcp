@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add universal read-only agile board, sprint, project-team, and issue-activity audit tools with strict schemas, bounded pagination, exact resolution, tests, and documented API limitations.
+
 ## 0.1.3 - 2026-07-14
 
 - Document the complete contributor workflow for versioning and automatic releases from `main`.
