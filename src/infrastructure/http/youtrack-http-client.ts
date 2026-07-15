@@ -60,10 +60,27 @@ export class YouTrackHttpClient {
     query: JsonRequest["query"],
     requestId: string,
   ): Promise<T> {
+    return this.getJsonFrom<T>("youtrack", path, query, requestId);
+  }
+
+  public async getHubJson<T>(
+    path: string,
+    query: JsonRequest["query"],
+    requestId: string,
+  ): Promise<T> {
+    return this.getJsonFrom<T>("hub", path, query, requestId);
+  }
+
+  private async getJsonFrom<T>(
+    root: "youtrack" | "hub",
+    path: string,
+    query: JsonRequest["query"],
+    requestId: string,
+  ): Promise<T> {
     let attempt = 1;
     for (;;) {
       try {
-        return await this.requestJson<T>({
+        return await this.requestJsonAt<T>(root, {
           method: "GET",
           path,
           requestId,
@@ -88,7 +105,11 @@ export class YouTrackHttpClient {
   }
 
   public async requestJson<T>(request: JsonRequest): Promise<T> {
-    const url = this.buildUrl(request.path, request.query, request.requestId);
+    return this.requestJsonAt<T>("youtrack", request);
+  }
+
+  private async requestJsonAt<T>(root: "youtrack" | "hub", request: JsonRequest): Promise<T> {
+    const url = this.buildUrl(root, request.path, request.query, request.requestId);
     const headers = new Headers({
       Accept: "application/json",
       Authorization: `Bearer ${this.#token}`,
@@ -174,6 +195,7 @@ export class YouTrackHttpClient {
   }
 
   private buildUrl(
+    root: "youtrack" | "hub",
     path: string,
     query: JsonRequest["query"],
     requestId: string,
@@ -188,7 +210,9 @@ export class YouTrackHttpClient {
       });
     }
 
-    const url = new URL(`api/${path}`, this.#baseUrl);
+    const url = root === "youtrack"
+      ? new URL(`api/${path}`, this.#baseUrl)
+      : new URL(`/hub/api/rest/${path}`, this.#baseUrl);
     if (url.origin !== this.#baseUrl.origin) {
       throw new YouTrackHttpError({
         kind: "transport_error",

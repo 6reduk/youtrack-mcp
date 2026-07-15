@@ -58,3 +58,21 @@ void test("forbidden admin schema is an honest non-complete fragment", async () 
     });
   });
 });
+
+void test("empty admin schema remains explicitly empty and incomplete", async () => {
+  await withHttpServer(() => ({ body: "[]" }), async (baseUrl) => {
+    const config: RuntimeConfig = {
+      baseUrl, token: new SecretValue("schema-secret"), requestTimeoutMs: 1_000,
+      logLevel: "error", insecureHttpAllowed: true,
+    };
+    const gateway = new RestYouTrackGateway(new YouTrackHttpClient({ config, logger }), baseUrl);
+    const result = await gateway.getAdminProjectSchema({
+      id: "project-x-id", shortName: "PX", name: "Project X", archived: false, url: baseUrl.href,
+    });
+    assert.deepEqual(result, {
+      source: { kind: "admin_project_fields", outcome: "empty" },
+      schemaComplete: false,
+      fields: [],
+    });
+  });
+});

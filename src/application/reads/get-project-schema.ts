@@ -1,7 +1,7 @@
 import type { IssueSelector, ProjectSelector } from "../../domain/identifiers.js";
 import type { OperationResult, Warning } from "../../domain/operation-result.js";
 import { createOperationResult } from "../../domain/operation-result.js";
-import type { FieldDefinition, ProjectSchema, SchemaSourceKind } from "../../domain/project-schema.js";
+import type { CompletenessEvidence, FieldDefinition, ProjectSchema, SchemaSourceKind } from "../../domain/project-schema.js";
 import { projectResolutionFailure, projectTarget, resolveProject } from "../read-support.js";
 import type { ReadContext, SchemaFragment } from "../ports.js";
 
@@ -43,6 +43,22 @@ function mergeFields(fragments: readonly SchemaFragment[]): readonly FieldDefini
   return [...fields.values()];
 }
 
+function schemaCompleteness(admin: SchemaFragment, probe: SchemaFragment | undefined): CompletenessEvidence {
+  if (admin.schemaComplete) {
+    return { status: "complete", reason: "authoritative_source_exhausted" };
+  }
+  if (probe !== undefined && probe.fields.length > 0) {
+    return { status: "partial", reason: "fallback_source" };
+  }
+  if (admin.source.outcome === "empty") {
+    return { status: "unavailable", reason: "source_empty" };
+  }
+  if (admin.source.outcome === "forbidden") {
+    return { status: "unavailable", reason: "source_forbidden" };
+  }
+  return { status: "unavailable", reason: "source_unavailable" };
+}
+
 export async function getProjectSchema(
   context: ReadContext,
   input: GetProjectSchemaInput,
@@ -57,6 +73,13 @@ export async function getProjectSchema(
   const admin = await context.gateway.getAdminProjectSchema(project);
   const fragments: SchemaFragment[] = [admin];
   const warnings: Warning[] = [];
+
+  if (admin.source.outcome === "empty") {
+    warnings.push({
+      kind: "admin_schema_empty",
+      message: "The administrative project-field source returned no visible fields; this does not prove that the project has no custom fields",
+    });
+  }
 
   if (input.probeIssue !== undefined && !admin.schemaComplete) {
     const probe = await context.gateway.getProbeProjectSchema(input.probeIssue);
@@ -114,6 +137,7 @@ export async function getProjectSchema(
   const schema: ProjectSchema = {
     project,
     schemaComplete: admin.schemaComplete,
+    completeness: schemaCompleteness(admin, fragments[1]),
     sources: fragments.map((fragment) => fragment.source),
     fields: mergeFields(fragments).map((field) =>
       includeValues ? field : { ...field, valuesComplete: false, allowedValues: [] },

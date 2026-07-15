@@ -1,5 +1,5 @@
 import type { UserSummary } from "./issue.js";
-import type { ProjectSummary } from "./project-schema.js";
+import type { CompletenessEvidence, ProjectSummary } from "./project-schema.js";
 
 export type AgileBoardSelector = Readonly<{ id: string }> | Readonly<{ exactName: string }>;
 
@@ -97,6 +97,13 @@ export interface ProjectTeamSnapshot {
   readonly teamRoles: readonly ProjectRoleSummary[] | null;
   readonly rolesAvailable: boolean;
   readonly warnings: readonly string[];
+  readonly source: "youtrack_project_team" | "hub_project_team";
+  readonly completeness: {
+    readonly users: CompletenessEvidence;
+    readonly groups: CompletenessEvidence;
+    readonly directMembership: CompletenessEvidence;
+    readonly roles: CompletenessEvidence;
+  };
 }
 
 export const ISSUE_ACTIVITY_CATEGORIES = [

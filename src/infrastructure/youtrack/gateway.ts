@@ -20,7 +20,7 @@ import type {
   ProjectTeamQuery,
   IssueActivityQuery,
 } from "../../application/ports.js";
-import type { AgileBoardSelector, AgileBoardSummary, ProjectTeamMember } from "../../domain/agile-audit.js";
+import type { AgileBoardSelector, AgileBoardSummary, ProjectTeamMember, ProjectTeamSnapshot } from "../../domain/agile-audit.js";
 import { DomainValidationError, getSelectorEntry, type IssueSelector, type PageRequest, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSection, IssueSnapshot, TagSummary, UserSummary } from "../../domain/issue.js";
 import type { IssueReference, LinkSnapshot, LinkTypeDefinition } from "../../domain/links.js";
@@ -42,8 +42,8 @@ import {
   ASSIGNED_ROLE_FIELDS,
 } from "../http/fields-projections.js";
 import type { YouTrackHttpClient } from "../http/youtrack-http-client.js";
-import type { ActivityDto, AgileDto, AssignedRoleDto, IssueDto, IssueLinkDto, LinkTypeDto, ProjectDto, SprintDto, TagDto, UserDto, UserGroupDto } from "./dtos.js";
-import { mapAgileBoardDetails, mapAgileBoardSummary, mapIssue, mapIssueActivity, mapIssueReference, mapLinkContainer, mapLinkType, mapProject, mapProjectField, mapProjectRole, mapProjectTeamGroup, mapSprint, mapTag, mapUser } from "./mappers.js";
+import type { ActivityDto, AgileDto, AssignedRoleDto, HubGroupsDto, HubOwnUsersDto, HubProjectsDto, HubProjectTeamsDto, HubUsersDto, IssueDto, IssueLinkDto, LinkTypeDto, ProjectDto, SprintDto, TagDto, UserDto, UserGroupDto } from "./dtos.js";
+import { mapAgileBoardDetails, mapAgileBoardSummary, mapHubProjectTeamGroup, mapHubUser, mapIssue, mapIssueActivity, mapIssueReference, mapLinkContainer, mapLinkType, mapProject, mapProjectField, mapProjectRole, mapProjectTeamGroup, mapSprint, mapTag, mapUser } from "./mappers.js";
 import { discoverAdminSchema } from "./schema-discovery.js";
 
 function page<T>(items: readonly T[], top: number): PageSlice<T> {
@@ -62,6 +62,25 @@ function sameProject(project: ProjectSummary, selector: ProjectSelector): boolea
 function partialReadError(error: unknown): boolean {
   return error instanceof YouTrackHttpError &&
     (error.kind === "permission_denied" || error.kind === "upstream_not_found");
+}
+
+function hubReadError(kind: "upstream_not_found" | "invalid_response", message: string, requestId: string): YouTrackHttpError {
+  return new YouTrackHttpError({ kind, message, status: null, retryable: false, requestId });
+}
+
+function hubCollection<T>(value: readonly T[] | undefined, label: string, requestId: string): readonly T[] {
+  if (!Array.isArray(value)) throw hubReadError("invalid_response", `Hub response omitted ${label}`, requestId);
+  return value as readonly T[];
+}
+
+function validTotal(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function hubHasMore(total: unknown, skip: number, returnedWithSentinel: number, top: number): boolean {
+  const count = Math.min(returnedWithSentinel, top);
+  const knownTotal = validTotal(total);
+  return knownTotal === null ? returnedWithSentinel > top : skip + count < knownTotal;
 }
 
 export class RestYouTrackGateway implements YouTrackGateway {
@@ -313,28 +332,46 @@ export class RestYouTrackGateway implements YouTrackGateway {
     return page(raw.map((item) => mapSprint(item, query.currentSprintId)), query.page.top);
   }
 
-  public async getProjectTeam(query: ProjectTeamQuery): Promise<ReturnType<YouTrackGateway["getProjectTeam"]> extends Promise<infer T> ? T : never> {
+  public async getProjectTeam(query: ProjectTeamQuery): Promise<ProjectTeamSnapshot> {
     const path = `admin/projects/${encodeURIComponent(query.project.id)}/team`;
-    const usersRaw = await this.#http.getJson<UserDto[]>(`${path}/users`, {
-      fields: TEAM_USER_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
-    }, randomUUID());
+    let usersRaw: readonly UserDto[];
+    try {
+      usersRaw = await this.#http.getJson<UserDto[]>(`${path}/users`, {
+        fields: TEAM_USER_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
+      }, randomUUID());
+    } catch (error: unknown) {
+      if (error instanceof YouTrackHttpError && error.kind === "upstream_not_found") {
+        return this.getHubProjectTeam(query);
+      }
+      throw error;
+    }
     const warnings: string[] = [];
     const directIds = new Set<string>();
+    let directCompleteness: ProjectTeamSnapshot["completeness"]["directMembership"] = {
+      status: "complete", reason: "authoritative_source_exhausted",
+    };
     try {
       const chunk = 100;
       for (let skip = 0; skip <= 10_000; skip += chunk) {
         const ownRaw = await this.#http.getJson<UserDto[]>(`${path}/ownUsers`, { fields: "id", $skip: skip, $top: chunk }, randomUUID());
         for (const user of ownRaw) if (typeof user.id === "string") directIds.add(user.id);
         if (ownRaw.length < chunk) break;
-        if (skip === 10_000) warnings.push("Direct membership enumeration reached its safety bound; some membership values may be unknown.");
+        if (skip === 10_000) {
+          warnings.push("Direct membership enumeration reached its safety bound; some membership values may be unknown.");
+          directCompleteness = { status: "partial", reason: "source_truncated" };
+        }
       }
     } catch (error: unknown) {
       if (!partialReadError(error)) throw error;
       warnings.push("Direct membership is unavailable with the current YouTrack version or permissions.");
+      directCompleteness = { status: "unavailable", reason: "source_unavailable" };
     }
 
     let groupsRaw: readonly UserGroupDto[] = [];
     let groupsHasMore = false;
+    let groupsCompleteness: ProjectTeamSnapshot["completeness"]["groups"] = {
+      status: "complete", reason: "authoritative_source_exhausted",
+    };
     try {
       const raw = await this.#http.getJson<UserGroupDto[]>(`${path}/groups`, {
         fields: TEAM_GROUP_FIELDS, $skip: query.page.skip, $top: query.page.top + 1,
@@ -344,9 +381,10 @@ export class RestYouTrackGateway implements YouTrackGateway {
     } catch (error: unknown) {
       if (!partialReadError(error)) throw error;
       warnings.push("Project team groups are unavailable with the current YouTrack version or permissions.");
+      groupsCompleteness = { status: "unavailable", reason: "source_unavailable" };
     }
 
-    const directKnown = warnings.every((warning) => !warning.startsWith("Direct membership"));
+    const directKnown = directCompleteness.status === "complete";
     const users: ProjectTeamMember[] = usersRaw.slice(0, query.page.top).map((user) => {
       const mapped = mapUser(user);
       return { ...mapped, membership: directKnown ? (directIds.has(mapped.id) ? "direct" : "via_group") : "unknown", roles: [] };
@@ -354,6 +392,7 @@ export class RestYouTrackGateway implements YouTrackGateway {
     const groups = groupsRaw.map(mapProjectTeamGroup);
     let rolesAvailable = true;
     let teamRoles: ReturnType<typeof mapProjectRole>[] | null = null;
+    let rolesTruncated = false;
     const roleMap = new Map<string, ReturnType<typeof mapProjectRole>[] | null>();
     let teamId: string | null = null;
     try {
@@ -369,7 +408,10 @@ export class RestYouTrackGateway implements YouTrackGateway {
         const assigned = await this.#http.getJson<AssignedRoleDto[]>("assignedRoles", {
           fields: ASSIGNED_ROLE_FIELDS, query: `holder:${holderId}`, $skip: 0, $top: 101,
         }, randomUUID());
-        if (assigned.length > 100) warnings.push(`Role assignments for holder ${holderId} reached the safety bound and were truncated.`);
+        if (assigned.length > 100) {
+          warnings.push(`Role assignments for holder ${holderId} reached the safety bound and were truncated.`);
+          rolesTruncated = true;
+        }
         const roles = assigned.slice(0, 100)
           .filter((item) => item.holder?.id === holderId && item.scope?.project?.id === query.project.id)
           .map(mapProjectRole);
@@ -401,6 +443,137 @@ export class RestYouTrackGateway implements YouTrackGateway {
       teamRoles,
       rolesAvailable,
       warnings,
+      source: "youtrack_project_team",
+      completeness: {
+        users: { status: "complete", reason: "authoritative_source_exhausted" },
+        groups: groupsCompleteness,
+        directMembership: directCompleteness,
+        roles: !rolesAvailable
+          ? { status: "unavailable", reason: "source_unavailable" }
+          : rolesTruncated
+            ? { status: "partial", reason: "source_truncated" }
+            : { status: "complete", reason: "authoritative_source_exhausted" },
+      },
+    };
+  }
+
+  private async getHubProjectTeam(query: ProjectTeamQuery): Promise<ProjectTeamSnapshot> {
+    const projectRequestId = randomUUID();
+    const projectPage = await this.#http.getHubJson<HubProjectsDto>("projects", {
+      fields: "id,key,name", query: `key:${query.project.shortName}`, $skip: 0, $top: 2,
+    }, projectRequestId);
+    const projects = hubCollection(projectPage.projects, "projects", projectRequestId)
+      .filter((project) => project.key === query.project.shortName);
+    if (projects.length === 0) {
+      throw hubReadError("upstream_not_found", "The corresponding Hub project was not found", projectRequestId);
+    }
+    if (projects.length !== 1 || typeof projects[0]?.id !== "string") {
+      throw hubReadError("invalid_response", "Hub project resolution was ambiguous or invalid", projectRequestId);
+    }
+    const hubProjectId = projects[0].id;
+
+    const teamRequestId = randomUUID();
+    const teamPage = await this.#http.getHubJson<HubProjectTeamsDto>("projectteams", {
+      fields: "id,project(id,key)", query: `project:${hubProjectId}`, $skip: 0, $top: 2,
+    }, teamRequestId);
+    const teams = hubCollection(teamPage.projectteams, "projectteams", teamRequestId)
+      .filter((team) => team.project?.id === hubProjectId);
+    if (teams.length === 0) {
+      throw hubReadError("upstream_not_found", "The corresponding Hub project team was not found", teamRequestId);
+    }
+    if (teams.length !== 1 || typeof teams[0]?.id !== "string") {
+      throw hubReadError("invalid_response", "Hub project-team resolution was ambiguous or invalid", teamRequestId);
+    }
+    const hubTeamId = teams[0].id;
+    const teamPath = `projectteams/${encodeURIComponent(hubTeamId)}`;
+
+    const usersRequestId = randomUUID();
+    const usersPage = await this.#http.getHubJson<HubUsersDto>(`${teamPath}/users`, {
+      fields: "id,login,name,banned", $skip: query.page.skip, $top: query.page.top + 1,
+    }, usersRequestId);
+    const usersRaw = hubCollection(usersPage.users, "users", usersRequestId);
+    const warnings = [
+      "Project team data was read from the Hub compatibility API because the YouTrack project-team API is unavailable.",
+    ];
+
+    const directIds = new Set<string>();
+    let directCompleteness: ProjectTeamSnapshot["completeness"]["directMembership"] = {
+      status: "complete", reason: "authoritative_source_exhausted",
+    };
+    try {
+      const chunk = 100;
+      for (let skip = 0; skip < 10_000; skip += chunk) {
+        const requestId = randomUUID();
+        const page = await this.#http.getHubJson<HubOwnUsersDto>(`${teamPath}/ownUsers`, {
+          fields: "id", $skip: skip, $top: chunk,
+        }, requestId);
+        const ownUsers = hubCollection(page.ownUsers, "ownUsers", requestId);
+        for (const user of ownUsers) if (typeof user.id === "string") directIds.add(user.id);
+        const total = validTotal(page.total);
+        if ((total !== null && skip + ownUsers.length >= total) || ownUsers.length < chunk) break;
+        if (skip + chunk >= 10_000) {
+          directCompleteness = { status: "partial", reason: "source_truncated" };
+          warnings.push("Direct membership enumeration from Hub reached its safety bound and was truncated.");
+        }
+      }
+    } catch (error: unknown) {
+      if (!partialReadError(error)) throw error;
+      directCompleteness = { status: "unavailable", reason: "source_unavailable" };
+      warnings.push("Direct membership is unavailable from the Hub compatibility API.");
+    }
+
+    let groupsRaw: readonly ReturnType<typeof mapHubProjectTeamGroup>[] = [];
+    let groupsHasMore = false;
+    let groupsCompleteness: ProjectTeamSnapshot["completeness"]["groups"] = {
+      status: "complete", reason: "authoritative_source_exhausted",
+    };
+    try {
+      const requestId = randomUUID();
+      const page = await this.#http.getHubJson<HubGroupsDto>(`${teamPath}/groups`, {
+        fields: "id,name,userCount,allUsers", $skip: query.page.skip, $top: query.page.top + 1,
+      }, requestId);
+      const raw = hubCollection(page.groups, "groups", requestId);
+      groupsRaw = raw.slice(0, query.page.top).map(mapHubProjectTeamGroup);
+      groupsHasMore = hubHasMore(page.total, query.page.skip, raw.length, query.page.top);
+    } catch (error: unknown) {
+      if (!partialReadError(error)) throw error;
+      groupsCompleteness = { status: "unavailable", reason: "source_unavailable" };
+      warnings.push("Direct project-team groups are unavailable from the Hub compatibility API.");
+    }
+
+    const directKnown = directCompleteness.status === "complete";
+    const users: ProjectTeamMember[] = usersRaw.slice(0, query.page.top).map((raw) => {
+      const user = mapHubUser(raw);
+      return {
+        ...user,
+        membership: directKnown ? (directIds.has(user.id) ? "direct" : "via_group") : "unknown",
+        roles: null,
+      };
+    });
+    warnings.push("Project-scoped role assignments are unavailable through the Hub compatibility source; no role identity mapping is inferred.");
+    warnings.push("The public project-team APIs do not expose job titles; no job title is inferred from role assignments.");
+
+    return {
+      project: query.project,
+      users,
+      groups: groupsRaw,
+      usersPage: {
+        skip: query.page.skip, requestedTop: query.page.top, returned: users.length,
+        hasMore: hubHasMore(usersPage.total, query.page.skip, usersRaw.length, query.page.top),
+      },
+      groupsPage: {
+        skip: query.page.skip, requestedTop: query.page.top, returned: groupsRaw.length, hasMore: groupsHasMore,
+      },
+      teamRoles: null,
+      rolesAvailable: false,
+      warnings,
+      source: "hub_project_team",
+      completeness: {
+        users: { status: "complete", reason: "authoritative_source_exhausted" },
+        groups: groupsCompleteness,
+        directMembership: directCompleteness,
+        roles: { status: "unavailable", reason: "source_unavailable" },
+      },
     };
   }
 

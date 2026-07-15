@@ -42,6 +42,21 @@ void test("client sends exact relative API request and keeps authorization out o
   );
 });
 
+void test("Hub reads use the fixed same-origin GET-only API root", async () => {
+  await withHttpServer(
+    () => ({ body: JSON.stringify({ projects: [] }) }),
+    async (baseUrl, requests) => {
+      const client = new YouTrackHttpClient({ config: config(baseUrl), logger });
+      assert.deepEqual(await client.getHubJson("projects", { query: "key:PX", $top: 2 }, "hub-read"), { projects: [] });
+      const request = requests[0];
+      assert.ok(request);
+      assert.equal(request.method, "GET");
+      assert.equal(request.url, "/hub/api/rest/projects?query=key%3APX&%24top=2");
+      assert.equal(request.headers.authorization, `Bearer ${TOKEN}`);
+    },
+  );
+});
+
 void test("safe GET honors bounded retry but POST is never replayed", async () => {
   const delays: number[] = [];
   await withHttpServer(
@@ -100,4 +115,6 @@ void test("transport timeout and unsafe internal paths are rejected", async () =
     (error: unknown) => error instanceof YouTrackHttpError && error.kind === "request_timeout");
   await assert.rejects(client.getJson("https://evil.example/", undefined, "origin"),
     (error: unknown) => error instanceof YouTrackHttpError && error.requestId === "origin");
+  await assert.rejects(client.getHubJson("../users", undefined, "hub-path"),
+    (error: unknown) => error instanceof YouTrackHttpError && error.requestId === "hub-path");
 });

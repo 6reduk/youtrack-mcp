@@ -28,6 +28,7 @@ void test("returns a complete admin schema without inventing a probe", async () 
   });
   assert.equal(result.status, "ok");
   assert.equal(result.data?.schemaComplete, true);
+  assert.deepEqual(result.data.completeness, { status: "complete", reason: "authoritative_source_exhausted" });
   assert.deepEqual(result.data.sources, [{ kind: "admin_project_fields", outcome: "ok" }]);
   assert.deepEqual(result.warnings, []);
   assert.equal(gateway.probeSchemaCalls, 0);
@@ -55,10 +56,57 @@ void test("merges an explicit same-project probe conservatively", async () => {
 
   assert.equal(result.status, "ok");
   assert.equal(result.data?.schemaComplete, false);
+  assert.deepEqual(result.data.completeness, { status: "partial", reason: "fallback_source" });
   assert.equal(result.data.fields.length, 2);
   assert.deepEqual(
     result.warnings.map((warning) => warning.kind),
     ["probe_schema_incomplete", "schema_incomplete"],
+  );
+});
+
+void test("marks an empty administrative view as unavailable without claiming no fields", async () => {
+  const gateway = new FakeGateway();
+  gateway.adminSchema = {
+    source: { kind: "admin_project_fields", outcome: "empty" },
+    schemaComplete: false,
+    fields: [],
+  };
+
+  const result = await getProjectSchema(createReadContext(gateway), {
+    project: { id: PROJECT_A.id },
+  });
+
+  assert.deepEqual(result.data?.completeness, { status: "unavailable", reason: "source_empty" });
+  assert.equal(result.data.schemaComplete, false);
+  assert.deepEqual(
+    result.warnings.map((warning) => warning.kind),
+    ["admin_schema_empty", "schema_incomplete"],
+  );
+});
+
+void test("marks an empty administrative view plus a useful probe as partial", async () => {
+  const gateway = new FakeGateway();
+  gateway.adminSchema = {
+    source: { kind: "admin_project_fields", outcome: "empty" },
+    schemaComplete: false,
+    fields: [],
+  };
+  gateway.probeSchema = {
+    source: { kind: "probe_issue", outcome: "partial" },
+    schemaComplete: false,
+    fields: [PROBE_FIELD],
+    issueId: "probe-issue-id",
+    projectId: PROJECT_A.id,
+  };
+
+  const result = await getProjectSchema(createReadContext(gateway), {
+    project: { id: PROJECT_A.id }, probeIssue: { id: "probe-issue-id" },
+  });
+
+  assert.deepEqual(result.data?.completeness, { status: "partial", reason: "fallback_source" });
+  assert.deepEqual(
+    result.warnings.map((warning) => warning.kind),
+    ["admin_schema_empty", "probe_schema_incomplete", "schema_incomplete"],
   );
 });
 

@@ -4,6 +4,7 @@ import type { LoggerPort } from "../../src/application/ports.js";
 import { SecretValue, type RuntimeConfig } from "../../src/infrastructure/config.js";
 import { YouTrackHttpClient } from "../../src/infrastructure/http/youtrack-http-client.js";
 import { RestYouTrackGateway } from "../../src/infrastructure/youtrack/gateway.js";
+import { YouTrackHttpError } from "../../src/infrastructure/http/error-mapper.js";
 import { ACTIVITY_DTO, AGILE_DTO, ISSUE_DTO, PROJECT_DTO, SPRINT_DTO, USER_DTO } from "./fixtures.js";
 import { withHttpServer } from "./http-test-server.js";
 
@@ -141,6 +142,87 @@ void test("project team keeps useful users when optional groups and roles are fo
     assert.equal(user.roles, null);
     assert.equal(team.warnings.some((warning) => warning.includes("groups are unavailable")), true);
     assert.equal(team.warnings.some((warning) => warning.includes("role assignments")), true);
+  });
+});
+
+void test("project team falls back to exact paginated Hub reads after primary 404", async () => {
+  await withHttpServer((request) => {
+    if (request.url.includes("/tracker/api/admin/projects/project-x-id/team/users?")) return { status: 404, body: "{}" };
+    if (request.url.startsWith("/hub/api/rest/projects?")) return { body: JSON.stringify({ skip: 0, top: 2, total: 1, projects: [{ id: "hub-project-x", key: "PX", name: "Project X" }] }) };
+    if (request.url.startsWith("/hub/api/rest/projectteams?")) return { body: JSON.stringify({ skip: 0, top: 2, total: 1, projectteams: [{ id: "hub-team-x", project: { id: "hub-project-x", key: "PX" } }] }) };
+    if (request.url.includes("/hub/api/rest/projectteams/hub-team-x/ownUsers?")) return { body: JSON.stringify({ skip: 0, top: 100, total: 1, ownUsers: [{ id: "hub-user-direct" }] }) };
+    if (request.url.includes("/hub/api/rest/projectteams/hub-team-x/groups?")) return { body: JSON.stringify({ skip: 0, top: 3, total: 1, groups: [{ id: "hub-group-x", name: "Group X", userCount: 3, allUsers: false }] }) };
+    if (request.url.includes("/hub/api/rest/projectteams/hub-team-x/users?")) return { body: JSON.stringify({ skip: 0, top: 3, total: 2, users: [
+      { id: "hub-user-direct", login: "direct.x", name: "Direct X", banned: false },
+      { id: "hub-user-group", login: "group.x", name: "Group X User", banned: false },
+    ] }) };
+    return { status: 500, body: "{}" };
+  }, async (baseUrl, requests) => {
+    const project = { id: "project-x-id", shortName: "PX", name: "Project X", archived: false, url: new URL("projects/PX", baseUrl).href };
+    const team = await gateway(baseUrl).getProjectTeam({ project, page: { skip: 0, top: 2 } });
+    const firstUser = team.users[0];
+    const secondUser = team.users[1];
+    const firstGroup = team.groups[0];
+    assert.ok(firstUser);
+    assert.ok(secondUser);
+    assert.ok(firstGroup);
+    assert.equal(team.source, "hub_project_team");
+    assert.equal(firstUser.membership, "direct");
+    assert.equal(secondUser.membership, "via_group");
+    assert.equal(firstUser.roles, null);
+    assert.equal(firstGroup.name, "Group X");
+    assert.equal(firstGroup.ringId, "hub-group-x");
+    assert.equal(team.rolesAvailable, false);
+    assert.deepEqual(team.completeness.users, { status: "complete", reason: "authoritative_source_exhausted" });
+    assert.deepEqual(team.completeness.directMembership, { status: "complete", reason: "authoritative_source_exhausted" });
+    assert.equal(requests.every((request) => request.method === "GET"), true);
+    assert.equal(requests.filter((request) => request.url.startsWith("/hub/api/rest/")).length, 5);
+    const projectRequest = new URL(requests.find((request) => request.url.startsWith("/hub/api/rest/projects?"))?.url ?? "", baseUrl);
+    assert.equal(projectRequest.searchParams.get("query"), "key:PX");
+    const teamRequest = new URL(requests.find((request) => request.url.startsWith("/hub/api/rest/projectteams?"))?.url ?? "", baseUrl);
+    assert.equal(teamRequest.searchParams.get("query"), "project:hub-project-x");
+  });
+});
+
+void test("Hub fallback preserves effective users when own users and direct groups are forbidden", async () => {
+  await withHttpServer((request) => {
+    if (request.url.includes("/tracker/api/admin/projects/project-x-id/team/users?")) return { status: 404, body: "{}" };
+    if (request.url.startsWith("/hub/api/rest/projects?")) return { body: JSON.stringify({ total: 1, projects: [{ id: "hub-project-x", key: "PX" }] }) };
+    if (request.url.startsWith("/hub/api/rest/projectteams?")) return { body: JSON.stringify({ total: 1, projectteams: [{ id: "hub-team-x", project: { id: "hub-project-x" } }] }) };
+    if (request.url.includes("/ownUsers?") || request.url.includes("/groups?")) return { status: 403, body: "{}" };
+    return { body: JSON.stringify({ total: 1, users: [{ id: "hub-user-x", login: "reader.x", name: "Reader X" }] }) };
+  }, async (baseUrl) => {
+    const project = { id: "project-x-id", shortName: "PX", name: "Project X", archived: false, url: new URL("projects/PX", baseUrl).href };
+    const team = await gateway(baseUrl).getProjectTeam({ project, page: { skip: 0, top: 5 } });
+    assert.equal(team.users[0]?.membership, "unknown");
+    assert.equal(team.groups.length, 0);
+    assert.deepEqual(team.completeness.directMembership, { status: "unavailable", reason: "source_unavailable" });
+    assert.deepEqual(team.completeness.groups, { status: "unavailable", reason: "source_unavailable" });
+    assert.equal(team.warnings.some((warning) => warning.includes("Direct membership is unavailable")), true);
+  });
+});
+
+void test("project team does not mask primary permission failures with Hub fallback", async () => {
+  await withHttpServer(() => ({ status: 403, body: "{}" }), async (baseUrl, requests) => {
+    const project = { id: "project-x-id", shortName: "PX", name: "Project X", archived: false, url: new URL("projects/PX", baseUrl).href };
+    await assert.rejects(gateway(baseUrl).getProjectTeam({ project, page: { skip: 0, top: 5 } }),
+      (error: unknown) => error instanceof YouTrackHttpError && error.kind === "permission_denied");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url.startsWith("/tracker/api/"), true);
+  });
+});
+
+void test("Hub fallback rejects ambiguous exact project resolution", async () => {
+  await withHttpServer((request) => request.url.startsWith("/hub/api/rest/projects?")
+    ? { body: JSON.stringify({ total: 2, projects: [
+      { id: "hub-project-a", key: "PX" }, { id: "hub-project-b", key: "PX" },
+    ] }) }
+    : { status: 404, body: "{}" }, async (baseUrl, requests) => {
+    const project = { id: "project-x-id", shortName: "PX", name: "Project X", archived: false, url: new URL("projects/PX", baseUrl).href };
+    await assert.rejects(gateway(baseUrl).getProjectTeam({ project, page: { skip: 0, top: 5 } }),
+      (error: unknown) => error instanceof YouTrackHttpError && error.kind === "invalid_response");
+    assert.equal(requests.length, 2);
+    assert.equal(requests.some((request) => request.url.startsWith("/hub/api/rest/projectteams?")), false);
   });
 });
 

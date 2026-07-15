@@ -8,6 +8,7 @@ export type HttpErrorKind =
   | "upstream_unavailable"
   | "redirect_rejected"
   | "invalid_json"
+  | "invalid_response"
   | "response_too_large"
   | "request_timeout"
   | "transport_error"

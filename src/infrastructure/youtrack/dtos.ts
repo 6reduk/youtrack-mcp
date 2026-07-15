@@ -117,3 +117,13 @@ export interface SprintDto { readonly id?: unknown; readonly name?: unknown; rea
 export interface UserGroupDto { readonly id?: unknown; readonly name?: unknown; readonly ringId?: unknown; readonly usersCount?: unknown; readonly allUsersGroup?: unknown; }
 export interface ActivityDto { readonly id?: unknown; readonly $type?: unknown; readonly timestamp?: unknown; readonly author?: UserDto | null; readonly category?: { readonly id?: unknown } | null; readonly field?: EntityValueDto | null; readonly targetMember?: unknown; readonly added?: unknown; readonly removed?: unknown; }
 export interface AssignedRoleDto { readonly id?: unknown; readonly role?: { readonly id?: unknown; readonly name?: unknown; readonly description?: unknown } | null; readonly holder?: { readonly id?: unknown; readonly $type?: unknown } | null; readonly scope?: { readonly id?: unknown; readonly $type?: unknown; readonly project?: { readonly id?: unknown } | null } | null; }
+
+export interface HubProjectDto { readonly id?: unknown; readonly key?: unknown; readonly name?: unknown; }
+export interface HubProjectTeamDto { readonly id?: unknown; readonly project?: HubProjectDto | null; }
+export interface HubUserDto { readonly id?: unknown; readonly login?: unknown; readonly name?: unknown; readonly banned?: unknown; }
+export interface HubGroupDto { readonly id?: unknown; readonly name?: unknown; readonly userCount?: unknown; readonly allUsers?: unknown; }
+export interface HubProjectsDto { readonly skip?: unknown; readonly top?: unknown; readonly total?: unknown; readonly projects?: readonly HubProjectDto[]; }
+export interface HubProjectTeamsDto { readonly skip?: unknown; readonly top?: unknown; readonly total?: unknown; readonly projectteams?: readonly HubProjectTeamDto[]; }
+export interface HubUsersDto { readonly skip?: unknown; readonly top?: unknown; readonly total?: unknown; readonly users?: readonly HubUserDto[]; }
+export interface HubOwnUsersDto { readonly skip?: unknown; readonly top?: unknown; readonly total?: unknown; readonly ownUsers?: readonly HubUserDto[]; }
+export interface HubGroupsDto { readonly skip?: unknown; readonly top?: unknown; readonly total?: unknown; readonly groups?: readonly HubGroupDto[]; }

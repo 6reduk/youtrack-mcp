@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 - 2026-07-15
+
+- Fall back to the official read-only Hub project-team API on pre-2026.1 YouTrack servers and report effective-user, direct-group, membership, role, and schema completeness explicitly.
+- Preserve explicit probe-issue schema discovery when the administrative project-field source is empty or unavailable, without treating an empty administrative view as proof that no fields exist.
+
 ## 0.1.4 - 2026-07-15
 
 - Add universal read-only agile board, sprint, project-team, and issue-activity audit tools with strict schemas, bounded pagination, exact resolution, tests, and documented API limitations.

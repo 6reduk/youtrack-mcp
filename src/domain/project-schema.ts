@@ -3,6 +3,19 @@ export type SchemaSourceOutcome = "ok" | "empty" | "forbidden" | "partial" | "fa
 export type Cardinality = "single" | "multi" | "unknown";
 export type Writability = "writable" | "read_only" | "unknown";
 export type FieldValueShape = "scalar" | "date" | "period" | "entity" | "user" | "unknown";
+export type ReadCompleteness = "complete" | "partial" | "unavailable";
+export type CompletenessReason =
+  | "authoritative_source_exhausted"
+  | "source_empty"
+  | "source_forbidden"
+  | "fallback_source"
+  | "source_truncated"
+  | "source_unavailable";
+
+export interface CompletenessEvidence {
+  readonly status: ReadCompleteness;
+  readonly reason: CompletenessReason;
+}
 
 export interface ProjectSummary {
   readonly id: string;
@@ -42,6 +55,7 @@ export interface FieldDefinition {
 export interface ProjectSchema {
   readonly project: ProjectSummary;
   readonly schemaComplete: boolean;
+  readonly completeness: CompletenessEvidence;
   readonly sources: readonly SchemaSource[];
   readonly fields: readonly FieldDefinition[];
 }

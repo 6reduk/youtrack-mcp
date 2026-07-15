@@ -125,3 +125,56 @@ void test("agile audit schemas reject unsupported activity categories", async ()
     assert.equal(result.structuredContent, undefined);
   });
 });
+
+void test("schema tool serializes explicit unavailable completeness for an empty admin view", async () => {
+  await withHttpServer((request) => request.url.includes("/customFields?")
+    ? { body: "[]" }
+    : { body: JSON.stringify(PROJECT_DTO) }, async (baseUrl) => {
+    await withStdioClient({
+      YOUTRACK_URL: baseUrl.href,
+      YOUTRACK_TOKEN: "protocol-secret",
+      YOUTRACK_ALLOW_INSECURE_HTTP: "true",
+      YOUTRACK_LOG_LEVEL: "error",
+    }, async (client) => {
+      const result = await client.callTool({
+        name: "youtrack_get_project_schema",
+        arguments: { project: { id: PROJECT_DTO.id } },
+      });
+      const envelope = result.structuredContent as { data: { schemaComplete: boolean; completeness: unknown }; warnings: { kind: string }[] };
+      assert.equal(envelope.data.schemaComplete, false);
+      assert.deepEqual(envelope.data.completeness, { status: "unavailable", reason: "source_empty" });
+      assert.equal(envelope.warnings.some((warning) => warning.kind === "admin_schema_empty"), true);
+    });
+  });
+});
+
+void test("project team tool serializes the read-only Hub compatibility source", async () => {
+  await withHttpServer((request) => {
+    if (request.url.includes("/tracker/api/admin/projects/project-x-id/team/users?")) return { status: 404, body: "{}" };
+    if (request.url.includes("/tracker/api/admin/projects/project-x-id?")) return { body: JSON.stringify(PROJECT_DTO) };
+    if (request.url.startsWith("/hub/api/rest/projects?")) return { body: JSON.stringify({ total: 1, projects: [{ id: "hub-project-x", key: "PX" }] }) };
+    if (request.url.startsWith("/hub/api/rest/projectteams?")) return { body: JSON.stringify({ total: 1, projectteams: [{ id: "hub-team-x", project: { id: "hub-project-x" } }] }) };
+    if (request.url.includes("/ownUsers?")) return { body: JSON.stringify({ total: 1, ownUsers: [{ id: "hub-user-x" }] }) };
+    if (request.url.includes("/groups?")) return { body: JSON.stringify({ total: 0, groups: [] }) };
+    if (request.url.includes("/users?")) return { body: JSON.stringify({ total: 1, users: [{ id: "hub-user-x", login: "reader.x", name: "Reader X" }] }) };
+    return { status: 500, body: "{}" };
+  }, async (baseUrl, requests) => {
+    await withStdioClient({
+      YOUTRACK_URL: baseUrl.href,
+      YOUTRACK_TOKEN: "protocol-secret",
+      YOUTRACK_ALLOW_INSECURE_HTTP: "true",
+      YOUTRACK_LOG_LEVEL: "error",
+    }, async (client) => {
+      const result = await client.callTool({
+        name: "youtrack_get_project_team",
+        arguments: { project: { id: PROJECT_DTO.id }, skip: 0, top: 5 },
+      });
+      const data = (result.structuredContent as { data: Record<string, unknown> }).data;
+      assert.equal(data.source, "hub_project_team");
+      assert.deepEqual((data.completeness as Record<string, unknown>).users, {
+        status: "complete", reason: "authoritative_source_exhausted",
+      });
+      assert.equal(requests.filter((request) => request.url.startsWith("/hub/api/rest/")).every((request) => request.method === "GET"), true);
+    });
+  });
+});

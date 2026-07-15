@@ -2,7 +2,7 @@
   "mcpServers": {
     "youtrack": {
       "command": "npx",
-      "args": ["-y", "@6reduk/youtrack-mcp@0.1.4"],
+      "args": ["-y", "@6reduk/youtrack-mcp@0.1.5"],
       "env": {
         "YOUTRACK_URL": "<SET_IN_YOUR_LOCAL_CONFIG>",
         "YOUTRACK_TOKEN": "<SET_IN_YOUR_LOCAL_CONFIG>"

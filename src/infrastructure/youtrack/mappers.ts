@@ -29,6 +29,8 @@ import type {
   SprintDto,
   UserGroupDto,
   AssignedRoleDto,
+  HubGroupDto,
+  HubUserDto,
 } from "./dtos.js";
 
 function requiredString(value: unknown, label: string): string {
@@ -173,6 +175,21 @@ export function mapProjectTeamGroup(dto: UserGroupDto): ProjectTeamGroup {
     usersCount: optionalInteger(dto.usersCount),
     allUsersGroup: optionalBoolean(dto.allUsersGroup),
     roles: [],
+  };
+}
+
+export function mapHubUser(dto: HubUserDto): UserSummary {
+  return mapUser(dto);
+}
+
+export function mapHubProjectTeamGroup(dto: HubGroupDto): ProjectTeamGroup {
+  return {
+    id: requiredString(dto.id, "Hub team group id"),
+    name: requiredString(dto.name, "Hub team group name"),
+    ringId: requiredString(dto.id, "Hub team group id"),
+    usersCount: optionalInteger(dto.userCount),
+    allUsersGroup: optionalBoolean(dto.allUsers),
+    roles: null,
   };
 }
 
