@@ -252,6 +252,9 @@ export class RestYouTrackGateway implements YouTrackGateway {
       link.direction === query.direction &&
       (selector.key === "id" ? link.type.id === selector.value : link.type.name === selector.value));
     const related = matches.map((link) => query.direction === "source_to_target" ? link.target : link.source);
+    if (links.hasMore) {
+      return { items: related.slice(query.page.skip, query.page.skip + query.page.top), hasMore: true };
+    }
     return page(related.slice(query.page.skip), query.page.top);
   }
 

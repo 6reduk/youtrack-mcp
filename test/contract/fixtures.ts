@@ -56,3 +56,46 @@ export const AGILE_DTO = {
 
 export const SPRINT_DTO = { id: "sprint-x-id", name: "Iteration X", goal: "Goal X", start: 10, finish: 20, archived: false, isDefault: false };
 export const ACTIVITY_DTO = { id: "activity-x-id", $type: "CustomFieldActivityItem", timestamp: 30, author: USER_DTO, category: { id: "CustomFieldCategory" }, field: { id: "field-x-id", name: "Workflow X", $type: "CustomField" }, targetMember: "customFields", added: { id: "value-b", name: "Value B", $type: "EnumBundleElement" }, removed: { id: "value-a", name: "Value A", $type: "EnumBundleElement" } };
+
+/** Neutral execute-plan fixtures shared by the transport contract suite. */
+export function executePlanIssueDto(
+  id: string,
+  summary = `Issue ${id}`,
+  updated = 20,
+  customFields: readonly unknown[] = [],
+) {
+  return {
+    ...ISSUE_DTO,
+    id,
+    idReadable: `QP-${id}`,
+    summary,
+    updated,
+    customFields,
+  };
+}
+
+export const EXECUTE_PLAN_TAG_DTO = {
+  id: "tag-q-id",
+  name: "Synthetic marker Q",
+  owner: USER_DTO,
+};
+
+export const EXECUTE_PLAN_LINK_TYPE_DTO = {
+  id: "link-q-id",
+  name: "Synthetic relation Q",
+  directed: true,
+  aggregation: false,
+  sourceToTarget: "relates outward Q",
+  targetToSource: "relates inward Q",
+};
+
+export function executePlanLinkContainerDto(
+  id: string,
+  direction: "OUTWARD" | "INWARD" = "OUTWARD",
+) {
+  return {
+    id,
+    direction,
+    linkType: EXECUTE_PLAN_LINK_TYPE_DTO,
+  };
+}
