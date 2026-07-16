@@ -128,3 +128,33 @@ void test("update preserves omitted fields and verifies only requested facts", a
   assert.equal(result.status, "updated");
   assert.deepEqual(gateway.updateCalls[0]?.command, { summary: "Changed" });
 });
+
+void test("partial update uses one target probe for multiple observed field changes", async () => {
+  const gateway = partialGateway();
+  const secondField = {
+    ...ENUM_FIELD,
+    id: "field-second-id",
+    name: "Second field",
+    allowedValues: [{ id: "second-value-id", name: "Second value", kind: "EnumBundleElement" }],
+  };
+  assert.ok(gateway.probeSchema);
+  const firstField = gateway.probeSchema.fields[0];
+  assert.ok(firstField);
+  gateway.probeSchema = { ...gateway.probeSchema, fields: [firstField, secondField] };
+  gateway.afterIssue = issueWith({ customFields: [
+    { id: ENUM_FIELD.id, name: ENUM_FIELD.name, fieldType: ENUM_FIELD.fieldType, valueType: ENUM_FIELD.valueType, value: { kind: "entity", selector: { id: "choice-next-id" } }, rawType: "SingleEnumIssueCustomField" },
+    { id: secondField.id, name: secondField.name, fieldType: secondField.fieldType, valueType: secondField.valueType, value: { kind: "entity", selector: { id: "second-value-id" } }, rawType: "SingleEnumIssueCustomField" },
+  ] });
+  const result = await updateIssue(mutationContext(gateway), {
+    issue: { id: ISSUE_A.id },
+    customFields: [
+      { field: { id: ENUM_FIELD.id }, action: "set", value: { kind: "entity", selector: { id: "choice-next-id" } } },
+      { field: { id: secondField.id }, action: "set", value: { kind: "entity", selector: { id: "second-value-id" } } },
+    ],
+  });
+  assert.equal(result.status, "updated");
+  assert.deepEqual(result.warnings.map((warning) => warning.kind), ["schema_partial"]);
+  assert.equal(gateway.issueReads, 2);
+  assert.equal(gateway.probeSchemaCalls, 1);
+  assert.equal(gateway.updateCalls.length, 1);
+});

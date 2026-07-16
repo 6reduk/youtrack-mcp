@@ -32,6 +32,7 @@ export async function createIssue(
     ...(input.probeIssue === undefined ? {} : { probeIssue: input.probeIssue }),
   });
   const serialized: SerializedCustomFieldChange[] = [];
+  const warnings = [...evidence.warnings];
   const conditions: Postcondition<IssueSnapshot, unknown>[] = [
     { name: "summary", expected: input.summary, observe: (issue) => issue.summary },
     { name: "description", expected: input.description, observe: (issue) => issue.description },
@@ -42,8 +43,9 @@ export async function createIssue(
     const field = resolveFieldFromEvidence(evidence, change.field);
     if (supplied.has(field.id)) throw new DomainValidationError("duplicate_field_change");
     supplied.add(field.id);
-    const encoded = await serializeChange(context, field, change);
+    const encoded = await serializeChange(context, field, change, evidence);
     serialized.push(encoded.serialized);
+    warnings.push(...encoded.warnings);
     conditions.push({ name: `customField:${field.id}`, expected: encoded.expected, observe: (issue) => observedField(issue, field.id), equals: fieldValueEquals });
   }
   if (evidence.mode === "complete") {
@@ -60,7 +62,7 @@ export async function createIssue(
     return createOperationResult({
       status: "ok", operation: "youtrack_create_issue", requestId,
       target: { kind: "project", id: project.id, name: project.name, url: project.url },
-      data: { plan }, warnings: evidence.warnings,
+      data: { plan }, warnings,
       journal: [{ name: "create_issue", status: "planned", verified: null }],
     });
   }
@@ -74,7 +76,7 @@ export async function createIssue(
       return createOperationResult({
         status: "failed", operation: "youtrack_create_issue", requestId,
         target: { kind: "project", id: project.id, name: project.name, url: project.url },
-        data: { plan }, verified: false, warnings: evidence.warnings,
+        data: { plan }, verified: false, warnings,
         journal: [{ name: "create_issue", status: "unknown", verified: false }],
         error: {
           kind: "uncertain_write",
@@ -92,7 +94,7 @@ export async function createIssue(
   if (after === null) {
     return createOperationResult({
       status: "failed", operation: "youtrack_create_issue", requestId,
-      data: { plan }, verified: false, warnings: evidence.warnings,
+      data: { plan }, verified: false, warnings,
       error: { kind: "post_read_missing", message: "Created issue was not readable for verification", httpStatus: null, retryable: false, details: {} },
     });
   }
@@ -101,7 +103,7 @@ export async function createIssue(
     status: verification.verified ? "created" : "failed",
     operation: "youtrack_create_issue", requestId,
     target: { kind: "issue", id: after.id, idReadable: after.idReadable, url: after.url },
-    data: { plan }, after, verified: verification.verified, warnings: evidence.warnings,
+    data: { plan }, after, verified: verification.verified, warnings,
     journal: [{ name: "create_issue", status: "completed", verified: verification.verified }],
     ...(verification.verified ? {} : {
       error: { kind: "postcondition_mismatch", message: "Created issue did not match every requested value", httpStatus: null, retryable: false, details: { mismatchCount: verification.mismatches.length } },

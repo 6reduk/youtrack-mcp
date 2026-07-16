@@ -14,10 +14,13 @@ void test("dry run and stale guard perform zero writes", async () => {
     reread: () => Promise.resolve(ISSUE_A),
     verify: () => ({ verified: true, mismatches: [] }),
   };
-  const dry = await runIssueMutation({ ...common, guards: { dryRun: true } });
+  const warning = { kind: "schema_partial", message: "partial evidence" };
+  const dry = await runIssueMutation({ ...common, guards: { dryRun: true }, warnings: [warning] });
   assert.equal(dry.status, "ok");
-  const conflict = await runIssueMutation({ ...common, guards: { expectedUpdatedAt: 999 } });
+  assert.equal(dry.warnings[0]?.kind, "schema_partial");
+  const conflict = await runIssueMutation({ ...common, guards: { expectedUpdatedAt: 999 }, warnings: [warning] });
   assert.equal(conflict.status, "conflict");
+  assert.equal(conflict.warnings[0]?.kind, "schema_partial");
   assert.equal(writes, 0);
 });
 
@@ -26,6 +29,7 @@ void test("uncertain write is never replayed and is decided by reconciliation", 
   const after = { ...ISSUE_A, summary: "After" };
   const result = await runIssueMutation({
     operation: "synthetic_mutation", requestId: "r", before: ISSUE_A, guards: {},
+    warnings: [{ kind: "schema_partial", message: "partial evidence" }],
     plan: { target: ISSUE_A.id, changes: ["summary"], writeCount: 1 },
     write: () => {
       writes += 1;
@@ -37,5 +41,5 @@ void test("uncertain write is never replayed and is decided by reconciliation", 
   assert.equal(writes, 1);
   assert.equal(result.status, "updated");
   assert.equal(result.verified, true);
-  assert.equal(result.warnings[0]?.kind, "write_response_uncertain_reconciled");
+  assert.deepEqual(result.warnings.map((warning) => warning.kind), ["schema_partial", "write_response_uncertain_reconciled"]);
 });

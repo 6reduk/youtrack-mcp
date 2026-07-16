@@ -19,7 +19,11 @@ export type MutationSchemaRequest =
   | { readonly purpose: "create"; readonly fieldsRequired: boolean; readonly probeIssue?: IssueSelector }
   | { readonly purpose: "existing_issue"; readonly probeIssue: IssueSelector };
 
-function partialSchemaWarnings(source: "admin_project_fields" | "probe_issue", probeIssueId: string | null): readonly Warning[] {
+function partialSchemaWarnings(
+  source: "admin_project_fields" | "probe_issue",
+  probeIssueId: string | null,
+  includeRequiredFieldsWarning: boolean,
+): readonly Warning[] {
   const details = {
     source,
     ...(probeIssueId === null ? {} : { probeIssueId }),
@@ -32,11 +36,11 @@ function partialSchemaWarnings(source: "admin_project_fields" | "probe_issue", p
         : "The administrative project schema is incomplete.",
       details,
     },
-    {
+    ...(includeRequiredFieldsWarning ? [{
       kind: "required_fields_unverified",
       message: "Unknown required project fields are delegated to YouTrack validation and defaults.",
       details,
-    },
+    }] : []),
   ];
 }
 
@@ -62,7 +66,7 @@ export async function loadMutationSchemaEvidence(
       fields: [],
       sources: [admin.source],
       probeIssueId: null,
-      warnings: partialSchemaWarnings("admin_project_fields", null),
+      warnings: partialSchemaWarnings("admin_project_fields", null, true),
     };
   }
 
@@ -79,7 +83,7 @@ export async function loadMutationSchemaEvidence(
     fields: probe.fields,
     sources: [admin.source, probe.source],
     probeIssueId: probe.issueId,
-    warnings: partialSchemaWarnings("probe_issue", probe.issueId),
+    warnings: partialSchemaWarnings("probe_issue", probe.issueId, request.purpose === "create"),
   };
 }
 
@@ -170,12 +174,15 @@ async function resolveUser(
   context: MutationContext,
   atom: Extract<FieldAtom, { kind: "user" }>,
 ): Promise<{ readonly atom: FieldAtom; readonly user: UserSummary }> {
-  const slice = await context.gateway.findUsers({ selector: atom.selector, page: { skip: 0, top: 100 }, includeBanned: false });
+  const slice = await context.gateway.findUsers({ selector: atom.selector, page: { skip: 0, top: 100 }, includeBanned: true });
   const entry = getSelectorEntry(atom.selector, ["id", "login", "email"]);
   const matches = slice.items.filter((user) => user[entry.key] === entry.value);
+  if (slice.hasMore) throw new DomainValidationError("user_ambiguous");
   if (matches.length !== 1) throw new DomainValidationError(matches.length === 0 ? "user_not_found" : "user_ambiguous");
   const user = matches[0];
   if (user === undefined) throw new DomainValidationError("user_not_found");
+  if (user.banned === true) throw new DomainValidationError("user_banned");
+  if (user.banned !== false) throw new DomainValidationError("user_status_unknown");
   return { atom: { kind: "user", selector: { id: user.id } }, user };
 }
 
@@ -193,24 +200,40 @@ export async function serializeChange(
   context: MutationContext,
   field: FieldDefinition,
   change: CustomFieldChange,
-): Promise<{ readonly serialized: SerializedCustomFieldChange; readonly expected: FieldValue | null }> {
+  evidence: MutationSchemaEvidence,
+): Promise<{
+  readonly serialized: SerializedCustomFieldChange;
+  readonly expected: FieldValue | null;
+  readonly warnings: readonly Warning[];
+}> {
   const type = issueCustomFieldType(field.fieldType);
   if (change.action === "clear") {
     if (field.required === true) throw new DomainValidationError("required_field: field cannot be cleared");
-    return { serialized: { id: field.id, name: field.name, $type: type, value: null }, expected: null };
+    return { serialized: { id: field.id, name: field.name, $type: type, value: null }, expected: null, warnings: [] };
   }
   const atoms = change.value.kind === "multi" ? change.value.values : [change.value];
   if (field.cardinality === "multi" && change.value.kind !== "multi") throw new DomainValidationError("cardinality_mismatch");
   if (field.cardinality === "single" && change.value.kind === "multi") throw new DomainValidationError("cardinality_mismatch");
   if (field.cardinality === "unknown") throw new DomainValidationError("unknown_cardinality");
   const resolved: FieldAtom[] = [];
+  const warnings: Warning[] = [];
   for (const atom of atoms) {
     if (atom.kind !== field.valueShape) throw new DomainValidationError("field_value_kind_mismatch");
     if (atom.kind === "entity") resolved.push(resolveAllowedEntity(field, atom));
     else if (atom.kind === "user") {
       const user = await resolveUser(context, atom);
-      if (!field.valuesComplete) throw new DomainValidationError("allowed_users_incomplete");
-      if (!field.allowedValues.some((allowed) => allowed.id === user.user.id)) throw new DomainValidationError("user_not_allowed_for_field");
+      if (field.valuesComplete) {
+        if (!field.allowedValues.some((allowed) => allowed.id === user.user.id)) throw new DomainValidationError("user_not_allowed_for_field");
+      } else if (evidence.mode === "complete") {
+        throw new DomainValidationError("allowed_users_incomplete");
+      } else {
+        if (evidence.probeIssueId === null) throw new DomainValidationError("allowed_users_incomplete");
+        warnings.push({
+          kind: "user_assignability_unverified",
+          message: "The user was resolved exactly, but project-field assignability is delegated to YouTrack validation.",
+          details: { fieldId: field.id, probeIssueId: evidence.probeIssueId },
+        });
+      }
       resolved.push(user.atom);
     }
     else resolved.push(atom);
@@ -226,7 +249,7 @@ export async function serializeChange(
     expected = first;
     value = encodeAtom(first);
   }
-  return { serialized: { id: field.id, name: field.name, $type: type, value }, expected };
+  return { serialized: { id: field.id, name: field.name, $type: type, value }, expected, warnings };
 }
 
 export function observedField(issue: IssueSnapshot, fieldId: string): unknown {

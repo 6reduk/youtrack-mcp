@@ -1,6 +1,8 @@
 import type { CreateIssueCommand, MutationWriteReceipt, UpdateIssueCommand } from "../../../src/application/ports.js";
 import type { IssueSelector } from "../../../src/domain/identifiers.js";
-import type { IssueSnapshot } from "../../../src/domain/issue.js";
+import type { IssueSection, IssueSnapshot } from "../../../src/domain/issue.js";
+import type { ProjectSummary } from "../../../src/domain/project-schema.js";
+import type { SchemaFragment } from "../../../src/application/ports.js";
 import type { FieldDefinition } from "../../../src/domain/project-schema.js";
 import { FakeGateway, ISSUE_A, PROJECT_A, USER_A, createReadContext } from "../reads/fakes.js";
 
@@ -40,6 +42,8 @@ export class MutationFakeGateway extends FakeGateway {
   public afterIssue: IssueSnapshot | null = ISSUE_A;
   public writeError: unknown = null;
   public probeSelectors: IssueSelector[] = [];
+  public issueReads = 0;
+  public adminSchemaCalls = 0;
 
   public constructor() {
     super();
@@ -63,6 +67,16 @@ export class MutationFakeGateway extends FakeGateway {
   public override getProbeProjectSchema(issue: IssueSelector) {
     this.probeSelectors.push(issue);
     return super.getProbeProjectSchema(issue);
+  }
+
+  public override getAdminProjectSchema(project: ProjectSummary): Promise<SchemaFragment> {
+    this.adminSchemaCalls += 1;
+    return super.getAdminProjectSchema(project);
+  }
+
+  public override getIssue(issue: IssueSelector, sections: readonly IssueSection[]): Promise<IssueSnapshot | null> {
+    this.issueReads += 1;
+    return super.getIssue(issue, sections);
   }
 
   public override updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt> {

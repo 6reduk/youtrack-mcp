@@ -20,6 +20,7 @@ interface RunMutationOptions {
   readonly before: IssueSnapshot;
   readonly guards: MutationGuards;
   readonly plan: MutationPlan;
+  readonly warnings?: readonly Warning[];
   readonly write: () => Promise<void>;
   readonly reread: () => Promise<IssueSnapshot | null>;
   readonly verify: (snapshot: IssueSnapshot) => VerificationResult;
@@ -44,6 +45,7 @@ export async function runIssueMutation(
       target: target(options.before),
       before: options.before,
       data: { plan: options.plan },
+      warnings: options.warnings ?? [],
       error: {
         kind: "updated_at_mismatch",
         message: "The issue changed after the caller's expected snapshot",
@@ -65,7 +67,7 @@ export async function runIssueMutation(
       target: target(options.before),
       before: options.before,
       data: { plan: options.plan },
-      warnings: guardWarnings,
+      warnings: [...(options.warnings ?? []), ...guardWarnings],
       journal: [{ name: "write", status: "planned", verified: null }],
     });
   }
@@ -94,6 +96,7 @@ export async function runIssueMutation(
       before: options.before,
       data: { plan: options.plan },
       verified: false,
+      warnings: [...(options.warnings ?? []), ...guardWarnings],
       journal: [{ name: "write", status: uncertain === null ? "completed" : "unknown", verified: false }],
       error: {
         kind: uncertain === null ? "post_read_missing" : "uncertain_write",
@@ -105,7 +108,9 @@ export async function runIssueMutation(
     });
   }
   const verification = options.verify(after);
-  const warnings: Warning[] = uncertain === null ? [...guardWarnings] : [...guardWarnings, {
+  const warnings: Warning[] = uncertain === null
+    ? [...(options.warnings ?? []), ...guardWarnings]
+    : [...(options.warnings ?? []), ...guardWarnings, {
     kind: "write_response_uncertain_reconciled",
     message: "The write response was uncertain; the result was determined only by a reconciliation read",
   }];
