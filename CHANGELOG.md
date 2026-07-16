@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add `youtrack_execute_plan`, a bounded two-phase batch tool with read-only preview, canonical SHA-256 `planHash`, explicit confirmation, exact selectors, and mandatory optimistic timestamp guards.
+- Execute up to 20 distinct issue-subject desired-state operations sequentially with stateless `already_satisfied` replay, stop-on-error, non-retried writes, and read-after-write verification.
+- Report uncertain writes and partial completion explicitly without transactions or guessed rollback, with regression coverage and operator recovery guidance.
+
 ## 0.1.7 - 2026-07-16
 
 - Allow safe issue creation and custom-field updates when administrative project schema is partial, using explicit same-project or target-issue probe evidence without claiming completeness.

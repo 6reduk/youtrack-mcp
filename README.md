@@ -34,7 +34,16 @@ Client examples: [Codex](examples/codex.example.toml), [Claude Code](examples/cl
 - Writes are not retried. Uncertain writes are reconciled with reads.
 - Mutations support dry-run and issue mutations support `expectedUpdatedAt` guards.
 - Link direction and hierarchy semantics always come from the caller.
-- There is no bulk mutation, delete-issue, guessed rollback, or inferred workflow.
+- `youtrack_execute_plan` supports bounded, confirmed batches of up to 20 desired-state mutations. It is sequential and non-transactional, stops on the first unverified result, and never guesses a rollback.
+- There is no batch issue/tag creation, hierarchy replacement, delete-issue, arbitrary command execution, or inferred workflow.
+
+## Bounded mutation plans
+
+`youtrack_execute_plan` uses a two-phase protocol. First submit the complete operation list with `dryRun: true`; the server performs a read-only preflight, resolves every selector, and returns the canonical `resolvedPlan` and lowercase SHA-256 `planHash`. After reviewing that evidence, repeat the same operations with `dryRun: false`, `confirm: true`, and the returned hash. The server rebuilds the plan and performs no write unless the hash still matches.
+
+Every operation requires `expectedUpdatedAt`. A plan may contain 1–20 operations, each affecting a different mutation-subject issue and producing at most one write. Supported kinds are `update_issue`, `set_custom_field`, `set_issue_state`, `set_assignee`, `add_tag`, `remove_tag`, `add_link`, and `remove_link`.
+
+Confirmed execution is desired-state idempotent: an exact state already reached is reported as `already_satisfied` without a write. Otherwise, each non-retried write is followed by a reconciliation read. Callers must inspect every step and `partialCompletion`; the tool provides neither a transaction nor rollback.
 
 See [tools](docs/tools.md), [safety](docs/safety.md), and [testing](docs/testing.md).
 
