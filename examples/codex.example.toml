@@ -1,6 +1,6 @@
 [mcp_servers.youtrack]
 command = "npx"
-args = ["-y", "@6reduk/youtrack-mcp@0.1.7"]
+args = ["-y", "@6reduk/youtrack-mcp@0.1.8"]
 env_vars = ["YOUTRACK_URL", "YOUTRACK_TOKEN"]
 startup_timeout_sec = 30
 tool_timeout_sec = 60
