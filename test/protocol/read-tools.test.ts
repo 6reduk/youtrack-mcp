@@ -26,6 +26,7 @@ const READ_TOOLS = [
 ];
 
 const MUTATION_TOOLS = [
+  "youtrack_execute_plan",
   "youtrack_create_issue",
   "youtrack_add_link",
   "youtrack_remove_link",
@@ -50,8 +51,53 @@ void test("stdio initialize lists exactly the approved tools", async () => {
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [...READ_TOOLS, ...MUTATION_TOOLS].sort());
     const readTools = tools.tools.filter((tool) => READ_TOOLS.includes(tool.name));
     const mutationTools = tools.tools.filter((tool) => MUTATION_TOOLS.includes(tool.name));
+    assert.equal(tools.tools.filter((tool) => tool.name === "youtrack_execute_plan").length, 1);
     assert.equal(readTools.every((tool) => tool.annotations?.readOnlyHint === true), true);
     assert.equal(mutationTools.every((tool) => tool.annotations?.destructiveHint === true), true);
+    const executePlan = tools.tools.find((tool) => tool.name === "youtrack_execute_plan");
+    assert.ok(executePlan);
+    assert.equal(executePlan.description, "Preview or sequentially execute a bounded, confirmed YouTrack mutation plan. Preview is read-only; confirmed execution is destructive, idempotent by desired state, and non-transactional.");
+    assert.deepEqual(executePlan.annotations, {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    });
+    const schema = executePlan.inputSchema as {
+      type: string;
+      properties: Record<string, unknown>;
+      required: string[];
+      additionalProperties: boolean;
+      oneOf: unknown[];
+    };
+    assert.equal(schema.type, "object");
+    assert.equal(schema.additionalProperties, false);
+    assert.deepEqual(schema.required, ["dryRun", "operations"]);
+    assert.equal(schema.oneOf.length, 2, JSON.stringify(schema));
+    assert.deepEqual(Object.keys(schema.properties).sort(), ["confirm", "dryRun", "operations", "planHash"]);
+    const operations = schema.properties.operations as {
+      type: string;
+      minItems: number;
+      maxItems: number;
+      items: { oneOf: Record<string, unknown>[] };
+    };
+    assert.equal(operations.type, "array");
+    assert.equal(operations.minItems, 1);
+    assert.equal(operations.maxItems, 20);
+    assert.equal(operations.items.oneOf.length, 8);
+    assert.equal(operations.items.oneOf.every((variant) => variant.additionalProperties === false), true);
+    const variants = operations.items.oneOf;
+    const byKind = (kind: string) => variants.find((variant) => {
+      const properties = variant.properties as Record<string, { const?: string }> | undefined;
+      return properties?.kind?.const === kind;
+    });
+    const update = byKind("update_issue") as { anyOf?: unknown[]; properties?: Record<string, unknown> };
+    const assignee = byKind("set_assignee") as { oneOf?: unknown[] };
+    assert.equal(update.anyOf?.length, 3);
+    assert.equal(assignee.oneOf?.length, 2);
+    const issue = update.properties?.issue as { anyOf: { additionalProperties?: boolean }[] };
+    assert.equal(issue.anyOf.length, 2);
+    assert.equal(issue.anyOf.every((selector) => selector.additionalProperties === false), true);
   });
 });
 
