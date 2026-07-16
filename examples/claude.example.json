@@ -3,7 +3,7 @@
     "youtrack": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@6reduk/youtrack-mcp@0.1.6"],
+      "args": ["-y", "@6reduk/youtrack-mcp@0.1.7"],
       "env": {
         "YOUTRACK_URL": "${YOUTRACK_URL}",
         "YOUTRACK_TOKEN": "${YOUTRACK_TOKEN}"

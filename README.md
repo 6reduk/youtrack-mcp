@@ -13,7 +13,7 @@ Read-only discovery includes agile board configuration and sprints, project-team
 ## Run
 
 ```bash
-npx -y @6reduk/youtrack-mcp@0.1.6
+npx -y @6reduk/youtrack-mcp@0.1.7
 ```
 
 The process uses stdio for MCP and writes diagnostics only to stderr. It accepts no CLI arguments.

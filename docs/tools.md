@@ -24,4 +24,16 @@ Read tools use bounded pagination. Exact selectors never silently select the fir
 
 Mutation responses include status, target, before/after evidence, verification, warnings, journal, and a safe error. Callers must inspect these fields instead of assuming transport success means business success.
 
+Custom-field mutations load the administrative project schema first. A complete schema keeps the strict global validation path. If that source is incomplete, an existing issue mutation uses the exact target issue as a same-project partial schema probe; `youtrack_create_issue` accepts an optional explicit `probeIssue`. Create without custom fields may proceed without a probe, leaving unknown required fields to YouTrack validation and defaults. Create with custom fields requires an exact same-project probe and accepts only fields and entity values positively observed there.
+
+Partial evidence never proves that a field or value is absent project-wide, that an observed field is globally unique, or that required fields are complete. Therefore `youtrack_set_issue_state` and `youtrack_set_assignee` require an explicit `field` when fallback evidence is partial. An exact active, non-banned user may be sent when a probed user bundle is incomplete; YouTrack remains authoritative for assignability and the result is verified by a post-read. Missing, ambiguous, paginated, banned, or unknown-status user resolution fails before a write.
+
+Machine-readable mutation warnings are:
+
+- `schema_partial`: only request-scoped probe evidence was available.
+- `required_fields_unverified`: create could not globally verify every required project field.
+- `user_assignability_unverified`: the user was resolved exactly, but field assignability is delegated to YouTrack validation.
+
+These warnings are preserved in dry-run, optimistic-conflict, uncertain-write reconciliation, missing post-read, and final verification results. `dryRun=true`, `expectedUpdatedAt`, the single-write limit, non-retried writes, and read-after-write verification apply equally to complete and partial schema paths.
+
 Hierarchy tools require an exact link type and direction. The MCP does not decide which relation means parent, subtask, dependency, or workflow stage.

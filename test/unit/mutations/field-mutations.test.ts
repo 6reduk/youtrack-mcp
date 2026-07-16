@@ -96,6 +96,45 @@ void test("partial target evidence rejects unobserved fields and values", async 
   assert.equal(missingFieldGateway.updateCalls.length + missingValueGateway.updateCalls.length, 0);
 });
 
+void test("partial target evidence rejects ambiguous fields and entity values", async () => {
+  const stateField = { ...ENUM_FIELD, fieldType: "state[1]", valueType: "state" };
+  const ambiguousFieldGateway = partialGateway(stateField);
+  assert.ok(ambiguousFieldGateway.probeSchema);
+  ambiguousFieldGateway.probeSchema = {
+    ...ambiguousFieldGateway.probeSchema,
+    fields: [stateField, { ...stateField, id: "second-state-field-id" }],
+  };
+  await assert.rejects(setIssueState(mutationContext(ambiguousFieldGateway), {
+    issue: { id: ISSUE_A.id }, field: { exactName: stateField.name }, value: { id: "choice-next-id" }, dryRun: true,
+  }), /field_ambiguous/u);
+
+  const ambiguousValueGateway = partialGateway({
+    ...stateField,
+    allowedValues: [
+      { id: "first-choice-id", name: "Duplicate choice", kind: "StateBundleElement" },
+      { id: "second-choice-id", name: "Duplicate choice", kind: "StateBundleElement" },
+    ],
+  });
+  await assert.rejects(setIssueState(mutationContext(ambiguousValueGateway), {
+    issue: { id: ISSUE_A.id }, field: { id: stateField.id }, value: { exactName: "Duplicate choice" }, dryRun: true,
+  }), /field_value_ambiguous/u);
+  assert.equal(ambiguousFieldGateway.updateCalls.length + ambiguousValueGateway.updateCalls.length, 0);
+});
+
+void test("clear rejects fields with unknown cardinality or value shape", async () => {
+  for (const field of [
+    { ...ENUM_FIELD, cardinality: "unknown" as const },
+    { ...ENUM_FIELD, valueType: "unknown", valueShape: "unknown" as const },
+  ]) {
+    const gateway = new MutationFakeGateway();
+    gateway.adminSchema = { ...gateway.adminSchema, fields: [field] };
+    await assert.rejects(setCustomField(mutationContext(gateway), {
+      issue: { id: ISSUE_A.id }, change: { field: { id: field.id }, action: "clear" }, dryRun: true,
+    }), /unknown_(?:cardinality|value_shape)/u);
+    assert.equal(gateway.updateCalls.length, 0);
+  }
+});
+
 void test("partial state and assignee wrappers require an explicit field selector", async () => {
   const stateGateway = partialGateway({ ...ENUM_FIELD, fieldType: "state[1]", valueType: "state" });
   await assert.rejects(setIssueState(mutationContext(stateGateway), {

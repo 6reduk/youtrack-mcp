@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 - 2026-07-16
+
+- Allow safe issue creation and custom-field updates when administrative project schema is partial, using explicit same-project or target-issue probe evidence without claiming completeness.
+- Preserve machine-readable schema, required-field, and user-assignability warnings through dry-run, guards, writes, reconciliation, and verification.
+- Require explicit fields for partial-schema state and assignee wrappers, and fail closed for ambiguous, paginated, banned, or unverified users.
+
 ## 0.1.6 - 2026-07-15
 
 - Add one cross-platform version-bump command with consistency checks, regression coverage, and release documentation for macOS, Linux, and Windows.

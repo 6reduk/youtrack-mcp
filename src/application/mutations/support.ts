@@ -207,6 +207,8 @@ export async function serializeChange(
   readonly warnings: readonly Warning[];
 }> {
   const type = issueCustomFieldType(field.fieldType);
+  if (field.cardinality === "unknown") throw new DomainValidationError("unknown_cardinality");
+  if (field.valueShape === "unknown") throw new DomainValidationError("unknown_value_shape");
   if (change.action === "clear") {
     if (field.required === true) throw new DomainValidationError("required_field: field cannot be cleared");
     return { serialized: { id: field.id, name: field.name, $type: type, value: null }, expected: null, warnings: [] };
@@ -214,7 +216,6 @@ export async function serializeChange(
   const atoms = change.value.kind === "multi" ? change.value.values : [change.value];
   if (field.cardinality === "multi" && change.value.kind !== "multi") throw new DomainValidationError("cardinality_mismatch");
   if (field.cardinality === "single" && change.value.kind === "multi") throw new DomainValidationError("cardinality_mismatch");
-  if (field.cardinality === "unknown") throw new DomainValidationError("unknown_cardinality");
   const resolved: FieldAtom[] = [];
   const warnings: Warning[] = [];
   for (const atom of atoms) {

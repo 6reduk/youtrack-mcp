@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createIssue } from "../../../src/application/mutations/create-issue.js";
 import { updateIssue } from "../../../src/application/mutations/update-issue.js";
-import { ISSUE_A, PROJECT_A } from "../reads/fakes.js";
-import { ENUM_FIELD, MutationFakeGateway, issueWith, mutationContext } from "./fakes.js";
+import { ISSUE_A, PROJECT_A, USER_A } from "../reads/fakes.js";
+import { ENUM_FIELD, MutationFakeGateway, USER_FIELD, issueWith, mutationContext } from "./fakes.js";
 
 function partialGateway(): MutationFakeGateway {
   const gateway = new MutationFakeGateway();
@@ -81,6 +81,30 @@ void test("partial schema accepts only exact same-project probe field and value 
   assert.deepEqual(gateway.probeSelectors, [{ idReadable: ISSUE_A.idReadable }]);
   assert.equal(result.warnings[0]?.kind, "schema_partial");
   assert.deepEqual(result.warnings[0].details, { source: "probe_issue", probeIssueId: ISSUE_A.idReadable });
+  assert.equal(gateway.createCalls.length, 0);
+});
+
+void test("partial create prepares exact state, type, and active assignee fields from one probe", async () => {
+  const gateway = partialGateway();
+  const stateField = { ...ENUM_FIELD, id: "state-field-id", name: "State field", fieldType: "state[1]", valueType: "state" };
+  const typeField = { ...ENUM_FIELD, id: "type-field-id", name: "Type field" };
+  const userField = { ...USER_FIELD, valuesComplete: false, allowedValues: [], provenance: ["probe_issue" as const] };
+  assert.ok(gateway.probeSchema);
+  gateway.probeSchema = { ...gateway.probeSchema, fields: [stateField, typeField, userField] };
+  const result = await createIssue(mutationContext(gateway), {
+    project: { id: PROJECT_A.id }, summary: "New issue", description: "Body",
+    customFields: [
+      { field: { id: stateField.id }, action: "set", value: { kind: "entity", selector: { id: "choice-next-id" } } },
+      { field: { id: typeField.id }, action: "set", value: { kind: "entity", selector: { exactName: "Choice Next" } } },
+      { field: { id: userField.id }, action: "set", value: { kind: "user", selector: { login: USER_A.login } } },
+    ],
+    probeIssue: { id: ISSUE_A.id }, dryRun: true,
+  });
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.warnings.map((warning) => warning.kind), [
+    "schema_partial", "required_fields_unverified", "user_assignability_unverified",
+  ]);
+  assert.equal(gateway.probeSchemaCalls, 1);
   assert.equal(gateway.createCalls.length, 0);
 });
 
