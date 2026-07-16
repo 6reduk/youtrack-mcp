@@ -617,12 +617,13 @@ export class RestYouTrackGateway implements YouTrackGateway {
   public async updateIssue(
     issue: IssueSelector,
     command: UpdateIssueCommand,
+    requestId = randomUUID(),
   ): Promise<MutationWriteReceipt> {
     const raw = await this.#http.requestJson<IssueDto>({
       method: "POST",
       path: issuePath(issue),
       query: { fields: "id,idReadable" },
-      requestId: randomUUID(),
+      requestId,
       body: command,
     });
     return {
@@ -646,20 +647,20 @@ export class RestYouTrackGateway implements YouTrackGateway {
     }
   }
 
-  public async addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> {
-    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues`, requestId: randomUUID(), body: { id: targetIssueId } });
+  public async addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string, requestId = randomUUID()): Promise<void> {
+    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues`, requestId, body: { id: targetIssueId } });
   }
 
-  public async removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void> {
-    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues/${encodeURIComponent(targetIssueId)}`, requestId: randomUUID() });
+  public async removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string, requestId = randomUUID()): Promise<void> {
+    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/links/${encodeURIComponent(containerId)}/issues/${encodeURIComponent(targetIssueId)}`, requestId });
   }
 
-  public async addIssueTag(issue: IssueSelector, tagId: string): Promise<void> {
-    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/tags`, requestId: randomUUID(), body: { id: tagId } });
+  public async addIssueTag(issue: IssueSelector, tagId: string, requestId = randomUUID()): Promise<void> {
+    await this.#http.requestJson({ method: "POST", path: `${issuePath(issue)}/tags`, requestId, body: { id: tagId } });
   }
 
-  public async removeIssueTag(issue: IssueSelector, tagId: string): Promise<void> {
-    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/tags/${encodeURIComponent(tagId)}`, requestId: randomUUID() });
+  public async removeIssueTag(issue: IssueSelector, tagId: string, requestId = randomUUID()): Promise<void> {
+    await this.#http.requestJson({ method: "DELETE", path: `${issuePath(issue)}/tags/${encodeURIComponent(tagId)}`, requestId });
   }
 
   public async createTag(command: CreateTagCommand): Promise<TagSummary> {

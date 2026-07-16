@@ -1,5 +1,10 @@
-import type { MutationContext, SerializedCustomFieldChange } from "../ports.js";
+import type { MutationContext, SerializedCustomFieldChange, UpdateIssueCommand } from "../ports.js";
 import type { CustomFieldChange, FieldAtom, FieldValue } from "../../domain/field-values.js";
+import type {
+  CanonicalFieldValue,
+  ResolvedUpdateCommandV1,
+  ResolvedUpdatePostconditionV1,
+} from "../../domain/execute-plan.js";
 import { DomainValidationError, getSelectorEntry, type FieldSelector, type IssueSelector, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSnapshot, UserSummary } from "../../domain/issue.js";
 import type { Warning } from "../../domain/operation-result.js";
@@ -254,8 +259,12 @@ export async function serializeChange(
 }
 
 export function observedField(issue: IssueSnapshot, fieldId: string): unknown {
-  return issue.customFields.find((field) => field.id === fieldId)?.value ?? null;
+  if (issue.customFieldsObserved !== true) return FIELD_NOT_OBSERVED;
+  const field = issue.customFields.find((candidate) => candidate.id === fieldId);
+  return field === undefined ? FIELD_NOT_OBSERVED : field.value;
 }
+
+const FIELD_NOT_OBSERVED = Symbol("field_not_observed");
 
 export function fieldValueEquals(expected: unknown, actual: unknown): boolean {
   const isMulti = (value: unknown): value is { readonly kind: "multi"; readonly values: readonly unknown[] } =>
@@ -267,4 +276,127 @@ export function fieldValueEquals(expected: unknown, actual: unknown): boolean {
     return JSON.stringify(left) === JSON.stringify(right);
   }
   return JSON.stringify(expected) === JSON.stringify(actual);
+}
+
+export interface IssueUpdateChanges {
+  readonly summary?: { readonly action: "set"; readonly value: string };
+  readonly description?:
+    | { readonly action: "set"; readonly value: string }
+    | { readonly action: "clear" };
+  readonly customFields?: readonly CustomFieldChange[];
+}
+
+interface RuntimeUpdatePostcondition {
+  readonly canonical: ResolvedUpdatePostconditionV1;
+  readonly satisfied: (issue: IssueSnapshot) => boolean;
+}
+
+/**
+ * Read-only issue-update compiler shared by standalone and batch mutations.
+ * It resolves selectors and codecs, but deliberately does not evaluate guards
+ * or dispatch a write.
+ */
+export interface PlannedIssueUpdate {
+  readonly command: UpdateIssueCommand;
+  readonly canonicalCommand: ResolvedUpdateCommandV1;
+  readonly canonicalPostconditions: readonly ResolvedUpdatePostconditionV1[];
+  readonly warnings: readonly Warning[];
+  readonly isSatisfied: (issue: IssueSnapshot) => boolean;
+}
+
+export async function planIssueUpdate(
+  context: MutationContext,
+  issue: IssueSnapshot,
+  changes: IssueUpdateChanges,
+  preloadedEvidence?: MutationSchemaEvidence,
+): Promise<PlannedIssueUpdate> {
+  const fieldChanges = changes.customFields ?? [];
+  if (
+    changes.summary === undefined
+    && changes.description === undefined
+    && fieldChanges.length === 0
+  ) {
+    throw new DomainValidationError("at_least_one_change_required");
+  }
+  if (
+    changes.summary !== undefined
+    && (changes.summary.value.trim().length === 0 || changes.summary.value.length > 1_000)
+  ) {
+    throw new DomainValidationError("invalid_summary");
+  }
+  if (
+    changes.description?.action === "set"
+    && changes.description.value.length > 100_000
+  ) {
+    throw new DomainValidationError("description_too_large");
+  }
+  if (fieldChanges.length > 100) {
+    throw new DomainValidationError("too_many_custom_field_changes");
+  }
+
+  const evidence = fieldChanges.length === 0
+    ? undefined
+    : (preloadedEvidence ?? await loadMutationSchemaEvidence(context, issue.project, {
+      purpose: "existing_issue",
+      probeIssue: { id: issue.id },
+    }));
+  const serialized: SerializedCustomFieldChange[] = [];
+  const canonicalFields: ResolvedUpdateCommandV1["customFields"] extends readonly (infer T)[] | undefined ? T[] : never = [];
+  const postconditions: RuntimeUpdatePostcondition[] = [];
+  const warnings = [...(evidence?.warnings ?? [])];
+  const seen = new Set<string>();
+
+  if (changes.summary !== undefined) {
+    const expected = changes.summary.value;
+    postconditions.push({
+      canonical: { kind: "summary", value: expected },
+      satisfied: (snapshot) => snapshot.summary === expected,
+    });
+  }
+  if (changes.description !== undefined) {
+    const expected = changes.description.action === "clear" ? null : changes.description.value;
+    postconditions.push({
+      canonical: { kind: "description", value: expected },
+      satisfied: (snapshot) => snapshot.descriptionObserved === true && snapshot.description === expected,
+    });
+  }
+
+  for (const change of fieldChanges) {
+    if (evidence === undefined) throw new DomainValidationError("schema_evidence_missing");
+    const field = resolveFieldFromEvidence(evidence, change.field);
+    if (seen.has(field.id)) throw new DomainValidationError("duplicate_field_change");
+    seen.add(field.id);
+    const encoded = await serializeChange(context, field, change, evidence);
+    serialized.push(encoded.serialized);
+    warnings.push(...encoded.warnings);
+    const canonicalValue = encoded.serialized.value as CanonicalFieldValue;
+    canonicalFields.push({ id: field.id, $type: encoded.serialized.$type, value: canonicalValue });
+    postconditions.push({
+      canonical: { kind: "custom_field", fieldId: field.id, value: canonicalValue },
+      satisfied: (snapshot) => fieldValueEquals(encoded.expected, observedField(snapshot, field.id)),
+    });
+  }
+
+  const command: UpdateIssueCommand = {
+    ...(changes.summary === undefined ? {} : { summary: changes.summary.value }),
+    ...(changes.description === undefined ? {} : {
+      description: changes.description.action === "clear" ? null : changes.description.value,
+    }),
+    ...(serialized.length === 0 ? {} : { customFields: serialized }),
+  };
+  const canonicalCommand: ResolvedUpdateCommandV1 = {
+    ...(changes.summary === undefined ? {} : { summary: changes.summary.value }),
+    ...(changes.description === undefined ? {} : {
+      description: changes.description.action === "clear" ? null : changes.description.value,
+    }),
+    ...(canonicalFields.length === 0 ? {} : { customFields: canonicalFields }),
+  };
+
+  return {
+    command,
+    canonicalCommand,
+    canonicalPostconditions: postconditions.map((condition) => condition.canonical),
+    warnings,
+    isSatisfied: (snapshot) => postconditions.every((condition) => condition.satisfied(snapshot)),
+  };
 }

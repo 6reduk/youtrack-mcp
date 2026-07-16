@@ -66,6 +66,7 @@ export const ISSUE_A: IssueSnapshot = {
   url: "https://tracker.example.test/issue/ALPHA-1",
   summary: "Exact summary",
   description: "Unchanged markdown",
+  descriptionObserved: true,
   project: PROJECT_A,
   reporter: USER_A,
   creator: USER_A,
@@ -74,6 +75,7 @@ export const ISSUE_A: IssueSnapshot = {
   updatedAt: 2,
   resolvedAt: null,
   customFields: [],
+  customFieldsObserved: true,
   tags: [],
   links: [],
 };

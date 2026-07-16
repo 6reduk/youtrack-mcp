@@ -322,6 +322,7 @@ export function mapIssue(
   return {
     ...reference,
     description: optionalString(dto.description),
+    descriptionObserved: Object.hasOwn(dto, "description"),
     project: mapProject(dto.project, baseUrl),
     reporter,
     creator: null,
@@ -330,6 +331,7 @@ export function mapIssue(
     updatedAt: optionalEpoch(dto.updated),
     resolvedAt: optionalEpoch(dto.resolved),
     customFields: (dto.customFields ?? []).map(mapIssueCustomField),
+    customFieldsObserved: Object.hasOwn(dto, "customFields"),
     tags,
     links,
   };

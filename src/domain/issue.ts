@@ -32,6 +32,8 @@ export interface IssueSnapshot {
   readonly url: string;
   readonly summary: string;
   readonly description: string | null;
+  /** Whether the upstream response explicitly contained the requested description field. */
+  readonly descriptionObserved?: boolean;
   readonly project: ProjectSummary;
   readonly reporter: UserSummary | null;
   readonly creator: UserSummary | null;
@@ -40,6 +42,8 @@ export interface IssueSnapshot {
   readonly updatedAt: number | null;
   readonly resolvedAt: number | null;
   readonly customFields: readonly IssueCustomFieldSnapshot[];
+  /** Whether the upstream response explicitly contained the requested customFields collection. */
+  readonly customFieldsObserved?: boolean;
   readonly tags: readonly TagSummary[];
   readonly links: readonly LinkSnapshot[];
 }

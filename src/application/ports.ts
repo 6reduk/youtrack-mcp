@@ -146,12 +146,12 @@ export interface YouTrackGateway {
   getProjectTeam(query: ProjectTeamQuery): Promise<ProjectTeamSnapshot>;
   listIssueActivities(query: IssueActivityQuery): Promise<PageSlice<IssueActivitySummary>>;
   createIssue(command: CreateIssueCommand): Promise<MutationWriteReceipt>;
-  updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt>;
+  updateIssue(issue: IssueSelector, command: UpdateIssueCommand, requestId?: string): Promise<MutationWriteReceipt>;
   listLinkContainers(issue: IssueSelector): Promise<readonly LinkContainerReference[]>;
-  addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void>;
-  removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string): Promise<void>;
-  addIssueTag(issue: IssueSelector, tagId: string): Promise<void>;
-  removeIssueTag(issue: IssueSelector, tagId: string): Promise<void>;
+  addIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string, requestId?: string): Promise<void>;
+  removeIssueLink(issue: IssueSelector, containerId: string, targetIssueId: string, requestId?: string): Promise<void>;
+  addIssueTag(issue: IssueSelector, tagId: string, requestId?: string): Promise<void>;
+  removeIssueTag(issue: IssueSelector, tagId: string, requestId?: string): Promise<void>;
   createTag(command: CreateTagCommand): Promise<TagSummary>;
 }
 

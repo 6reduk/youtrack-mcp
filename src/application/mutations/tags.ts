@@ -4,32 +4,36 @@ import type { MutationContext } from "../ports.js";
 import { runIssueMutation, type MutationGuards } from "../mutation-runner.js";
 import { readIssueExact } from "./support.js";
 
-interface TagMutationInput extends MutationGuards { readonly issue: IssueSelector; readonly tag: TagSelector }
+export interface TagMutationInput extends MutationGuards { readonly issue: IssueSelector; readonly tag: TagSelector }
 
-async function resolveTag(context: MutationContext, selector: TagSelector) {
+export async function resolveTagExact(context: MutationContext, selector: TagSelector) {
   const key = getSelectorEntry(selector, ["id", "exactName"]);
   const slice = await context.gateway.listTags({ page: { skip: 0, top: 100 }, ...(key.key === "exactName" ? { query: key.value } : {}) });
   const matches = slice.items.filter((tag) => key.key === "id" ? tag.id === key.value : tag.name === key.value);
-  if (slice.hasMore && matches.length < 1) throw new DomainValidationError("tags_incomplete");
+  if (slice.hasMore && (key.key === "exactName" || matches.length < 1)) throw new DomainValidationError("tags_incomplete");
   if (matches.length !== 1) throw new DomainValidationError(matches.length === 0 ? "tag_not_found" : "tag_ambiguous");
   const match = matches[0];
   if (match === undefined) throw new DomainValidationError("tag_not_found");
   return match;
 }
 
+export function hasTag(issue: { readonly tags: readonly { readonly id: string }[] }, tagId: string): boolean {
+  return issue.tags.some((item) => item.id === tagId);
+}
+
 export async function addTag(context: MutationContext, input: TagMutationInput): Promise<OperationResult<unknown>> {
-  const requestId = context.ids.nextId(), before = await readIssueExact(context, input.issue), tag = await resolveTag(context, input.tag);
+  const requestId = context.ids.nextId(), before = await readIssueExact(context, input.issue), tag = await resolveTagExact(context, input.tag);
   const snapshot = await context.gateway.getIssue({ id: before.id }, ["system", "tags"]);
   if (snapshot === null) throw new DomainValidationError("issue_not_found");
-  if (snapshot.tags.some((item) => item.id === tag.id)) return createOperationResult({ status: "existing", operation: "youtrack_add_tag", requestId, target: { kind: "tag", id: tag.id, name: tag.name }, before: snapshot });
+  if (hasTag(snapshot, tag.id)) return createOperationResult({ status: "existing", operation: "youtrack_add_tag", requestId, target: { kind: "tag", id: tag.id, name: tag.name }, before: snapshot });
   return runIssueMutation({ operation: "youtrack_add_tag", requestId, before: snapshot, guards: input, plan: { target: before.idReadable, changes: [`addTag:${tag.id}`], writeCount: 1 }, write: () => context.gateway.addIssueTag({ id: before.id }, tag.id), reread: () => context.gateway.getIssue({ id: before.id }, ["system", "tags"]), verify: (after) => ({ verified: after.tags.some((item) => item.id === tag.id), mismatches: [] }) });
 }
 
 export async function removeTag(context: MutationContext, input: TagMutationInput): Promise<OperationResult<unknown>> {
-  const requestId = context.ids.nextId(), before = await readIssueExact(context, input.issue), tag = await resolveTag(context, input.tag);
+  const requestId = context.ids.nextId(), before = await readIssueExact(context, input.issue), tag = await resolveTagExact(context, input.tag);
   const snapshot = await context.gateway.getIssue({ id: before.id }, ["system", "tags"]);
   if (snapshot === null) throw new DomainValidationError("issue_not_found");
-  if (!snapshot.tags.some((item) => item.id === tag.id)) return createOperationResult({ status: "not_found", operation: "youtrack_remove_tag", requestId, target: { kind: "tag", id: tag.id, name: tag.name }, before: snapshot });
+  if (!hasTag(snapshot, tag.id)) return createOperationResult({ status: "not_found", operation: "youtrack_remove_tag", requestId, target: { kind: "tag", id: tag.id, name: tag.name }, before: snapshot });
   return runIssueMutation({ operation: "youtrack_remove_tag", requestId, before: snapshot, guards: input, plan: { target: before.idReadable, changes: [`removeTag:${tag.id}`], writeCount: 1 }, write: () => context.gateway.removeIssueTag({ id: before.id }, tag.id), reread: () => context.gateway.getIssue({ id: before.id }, ["system", "tags"]), verify: (after) => ({ verified: !after.tags.some((item) => item.id === tag.id), mismatches: [] }) });
 }
 
