@@ -39,6 +39,7 @@ export class MutationFakeGateway extends FakeGateway {
   public updateCalls: { issue: IssueSelector; command: UpdateIssueCommand }[] = [];
   public afterIssue: IssueSnapshot | null = ISSUE_A;
   public writeError: unknown = null;
+  public probeSelectors: IssueSelector[] = [];
 
   public constructor() {
     super();
@@ -57,6 +58,11 @@ export class MutationFakeGateway extends FakeGateway {
     if (this.writeError !== null) return Promise.reject(this.writeError instanceof Error ? this.writeError : new Error("synthetic write error"));
     this.issue = this.afterIssue;
     return Promise.resolve({ issueId: ISSUE_A.id, issueIdReadable: ISSUE_A.idReadable });
+  }
+
+  public override getProbeProjectSchema(issue: IssueSelector) {
+    this.probeSelectors.push(issue);
+    return super.getProbeProjectSchema(issue);
   }
 
   public override updateIssue(issue: IssueSelector, command: UpdateIssueCommand): Promise<MutationWriteReceipt> {

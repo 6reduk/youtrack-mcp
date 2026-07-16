@@ -83,10 +83,12 @@ export function registerMutationTools(server: McpServer, context: MutationContex
     summary: z.string().min(1).max(1_000),
     description: z.string().max(100_000),
     customFields: z.array(fieldChange).max(100).optional(),
+    probeIssue: issueSelector.optional(),
     dryRun: z.boolean().default(false),
   }), (input) => createIssue(context, {
     project: input.project, summary: input.summary, description: input.description, dryRun: input.dryRun,
     ...(input.customFields === undefined ? {} : { customFields: input.customFields }),
+    ...(input.probeIssue === undefined ? {} : { probeIssue: input.probeIssue }),
   }), false);
 
   register(server, context, "youtrack_update_issue", z.strictObject({

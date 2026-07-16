@@ -1,18 +1,19 @@
 import type { CustomFieldChange } from "../../domain/field-values.js";
-import { DomainValidationError, type ProjectSelector } from "../../domain/identifiers.js";
+import { DomainValidationError, type IssueSelector, type ProjectSelector } from "../../domain/identifiers.js";
 import { createOperationResult, type OperationResult } from "../../domain/operation-result.js";
 import { verifyPostconditions, type Postcondition } from "../../domain/verification.js";
 import type { IssueSnapshot } from "../../domain/issue.js";
 import { YouTrackHttpError } from "../../infrastructure/http/error-mapper.js";
 import type { MutationContext, SerializedCustomFieldChange } from "../ports.js";
 import type { MutationPlan } from "../mutation-runner.js";
-import { fieldValueEquals, loadFields, observedField, resolveFieldExact, resolveProjectExact, serializeChange } from "./support.js";
+import { fieldValueEquals, loadMutationSchemaEvidence, observedField, resolveFieldFromEvidence, resolveProjectExact, serializeChange } from "./support.js";
 
 export interface CreateIssueInput {
   readonly project: ProjectSelector;
   readonly summary: string;
   readonly description: string;
   readonly customFields?: readonly CustomFieldChange[];
+  readonly probeIssue?: IssueSelector;
   readonly dryRun?: boolean;
 }
 
@@ -24,8 +25,12 @@ export async function createIssue(
   if (input.summary.trim().length === 0 || input.summary.length > 1_000) throw new DomainValidationError("invalid_summary");
   if (input.description.length > 100_000) throw new DomainValidationError("description_too_large");
   const project = await resolveProjectExact(context, input.project);
-  const fields = await loadFields(context, project);
   const changes = input.customFields ?? [];
+  const evidence = await loadMutationSchemaEvidence(context, project, {
+    purpose: "create",
+    fieldsRequired: changes.length > 0,
+    ...(input.probeIssue === undefined ? {} : { probeIssue: input.probeIssue }),
+  });
   const serialized: SerializedCustomFieldChange[] = [];
   const conditions: Postcondition<IssueSnapshot, unknown>[] = [
     { name: "summary", expected: input.summary, observe: (issue) => issue.summary },
@@ -34,16 +39,18 @@ export async function createIssue(
   const supplied = new Set<string>();
   for (const change of changes) {
     if (change.action !== "set") throw new DomainValidationError("create_fields_must_use_set");
-    const field = resolveFieldExact(fields, change.field);
+    const field = resolveFieldFromEvidence(evidence, change.field);
     if (supplied.has(field.id)) throw new DomainValidationError("duplicate_field_change");
     supplied.add(field.id);
     const encoded = await serializeChange(context, field, change);
     serialized.push(encoded.serialized);
     conditions.push({ name: `customField:${field.id}`, expected: encoded.expected, observe: (issue) => observedField(issue, field.id), equals: fieldValueEquals });
   }
-  const missingRequired = fields.filter((field) =>
-    field.required === true && field.hasDefaultValue === false && !supplied.has(field.id));
-  if (missingRequired.length > 0) throw new DomainValidationError("required_custom_fields_missing");
+  if (evidence.mode === "complete") {
+    const missingRequired = evidence.fields.filter((field) =>
+      field.required === true && field.hasDefaultValue === false && !supplied.has(field.id));
+    if (missingRequired.length > 0) throw new DomainValidationError("required_custom_fields_missing");
+  }
   const plan: MutationPlan = {
     target: project.shortName,
     changes: conditions.map((condition) => condition.name),
@@ -53,7 +60,8 @@ export async function createIssue(
     return createOperationResult({
       status: "ok", operation: "youtrack_create_issue", requestId,
       target: { kind: "project", id: project.id, name: project.name, url: project.url },
-      data: { plan }, journal: [{ name: "create_issue", status: "planned", verified: null }],
+      data: { plan }, warnings: evidence.warnings,
+      journal: [{ name: "create_issue", status: "planned", verified: null }],
     });
   }
   let receipt;
@@ -66,7 +74,7 @@ export async function createIssue(
       return createOperationResult({
         status: "failed", operation: "youtrack_create_issue", requestId,
         target: { kind: "project", id: project.id, name: project.name, url: project.url },
-        data: { plan }, verified: false,
+        data: { plan }, verified: false, warnings: evidence.warnings,
         journal: [{ name: "create_issue", status: "unknown", verified: false }],
         error: {
           kind: "uncertain_write",
@@ -84,7 +92,7 @@ export async function createIssue(
   if (after === null) {
     return createOperationResult({
       status: "failed", operation: "youtrack_create_issue", requestId,
-      data: { plan }, verified: false,
+      data: { plan }, verified: false, warnings: evidence.warnings,
       error: { kind: "post_read_missing", message: "Created issue was not readable for verification", httpStatus: null, retryable: false, details: {} },
     });
   }
@@ -93,7 +101,7 @@ export async function createIssue(
     status: verification.verified ? "created" : "failed",
     operation: "youtrack_create_issue", requestId,
     target: { kind: "issue", id: after.id, idReadable: after.idReadable, url: after.url },
-    data: { plan }, after, verified: verification.verified,
+    data: { plan }, after, verified: verification.verified, warnings: evidence.warnings,
     journal: [{ name: "create_issue", status: "completed", verified: verification.verified }],
     ...(verification.verified ? {} : {
       error: { kind: "postcondition_mismatch", message: "Created issue did not match every requested value", httpStatus: null, retryable: false, details: { mismatchCount: verification.mismatches.length } },

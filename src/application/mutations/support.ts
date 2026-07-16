@@ -1,8 +1,87 @@
 import type { MutationContext, SerializedCustomFieldChange } from "../ports.js";
 import type { CustomFieldChange, FieldAtom, FieldValue } from "../../domain/field-values.js";
-import { DomainValidationError, getSelectorEntry, type FieldSelector, type ProjectSelector } from "../../domain/identifiers.js";
+import { DomainValidationError, getSelectorEntry, type FieldSelector, type IssueSelector, type ProjectSelector } from "../../domain/identifiers.js";
 import type { IssueSnapshot, UserSummary } from "../../domain/issue.js";
-import type { FieldDefinition, ProjectSummary } from "../../domain/project-schema.js";
+import type { Warning } from "../../domain/operation-result.js";
+import type { FieldDefinition, ProjectSummary, SchemaSource } from "../../domain/project-schema.js";
+
+export type MutationSchemaMode = "complete" | "partial";
+
+export interface MutationSchemaEvidence {
+  readonly mode: MutationSchemaMode;
+  readonly fields: readonly FieldDefinition[];
+  readonly sources: readonly SchemaSource[];
+  readonly probeIssueId: string | null;
+  readonly warnings: readonly Warning[];
+}
+
+export type MutationSchemaRequest =
+  | { readonly purpose: "create"; readonly fieldsRequired: boolean; readonly probeIssue?: IssueSelector }
+  | { readonly purpose: "existing_issue"; readonly probeIssue: IssueSelector };
+
+function partialSchemaWarnings(source: "admin_project_fields" | "probe_issue", probeIssueId: string | null): readonly Warning[] {
+  const details = {
+    source,
+    ...(probeIssueId === null ? {} : { probeIssueId }),
+  };
+  return [
+    {
+      kind: "schema_partial",
+      message: source === "probe_issue"
+        ? "The mutation was validated with partial project-schema evidence."
+        : "The administrative project schema is incomplete.",
+      details,
+    },
+    {
+      kind: "required_fields_unverified",
+      message: "Unknown required project fields are delegated to YouTrack validation and defaults.",
+      details,
+    },
+  ];
+}
+
+export async function loadMutationSchemaEvidence(
+  context: MutationContext,
+  project: ProjectSummary,
+  request: MutationSchemaRequest,
+): Promise<MutationSchemaEvidence> {
+  const admin = await context.gateway.getAdminProjectSchema(project);
+  if (admin.schemaComplete) {
+    return {
+      mode: "complete",
+      fields: admin.fields,
+      sources: [admin.source],
+      probeIssueId: null,
+      warnings: [],
+    };
+  }
+
+  if (request.purpose === "create" && !request.fieldsRequired) {
+    return {
+      mode: "partial",
+      fields: [],
+      sources: [admin.source],
+      probeIssueId: null,
+      warnings: partialSchemaWarnings("admin_project_fields", null),
+    };
+  }
+
+  const probeSelector = request.probeIssue;
+  if (probeSelector === undefined) {
+    throw new DomainValidationError("probe_issue_required_for_partial_schema");
+  }
+  const probe = await context.gateway.getProbeProjectSchema(probeSelector);
+  if (probe === null) throw new DomainValidationError("probe_issue_not_found");
+  if (probe.projectId !== project.id) throw new DomainValidationError("probe_project_mismatch");
+
+  return {
+    mode: "partial",
+    fields: probe.fields,
+    sources: [admin.source, probe.source],
+    probeIssueId: probe.issueId,
+    warnings: partialSchemaWarnings("probe_issue", probe.issueId),
+  };
+}
 
 export async function resolveProjectExact(
   context: MutationContext,
@@ -43,6 +122,20 @@ export function resolveFieldExact(
   const field = matches[0];
   if (field === undefined) throw new DomainValidationError("field_not_found");
   return field;
+}
+
+export function resolveFieldFromEvidence(
+  evidence: MutationSchemaEvidence,
+  selector: FieldSelector,
+): FieldDefinition {
+  try {
+    return resolveFieldExact(evidence.fields, selector);
+  } catch (error: unknown) {
+    if (evidence.mode === "partial" && error instanceof DomainValidationError && error.message === "field_not_found") {
+      throw new DomainValidationError("field_evidence_not_found");
+    }
+    throw error;
+  }
 }
 
 export function issueCustomFieldType(fieldType: string): string {
