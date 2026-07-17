@@ -10,8 +10,8 @@ try {
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: dir, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, npm_config_cache: join(dir, ".npm-cache") } });
   const manifest = JSON.parse(readFileSync(join(dir, "node_modules", "@6reduk", "youtrack-mcp", "package.json"), "utf8"));
   if (manifest.name !== "@6reduk/youtrack-mcp") throw new Error(`Unexpected installed package from ${basename(tarball)}`);
-  const bin = join(dir, "node_modules", "@6reduk", "youtrack-mcp", "dist", "cli.js");
-  const child = spawn(process.execPath, [bin], { cwd: dir, env: { ...process.env, YOUTRACK_URL: "https://tracker.example.test/", YOUTRACK_TOKEN: "packed-smoke-placeholder", YOUTRACK_LOG_LEVEL: "error" }, stdio: ["pipe", "pipe", "pipe"] });
+  const bin = join(dir, "node_modules", ".bin", process.platform === "win32" ? "youtrack-mcp.cmd" : "youtrack-mcp");
+  const child = spawn(bin, [], { cwd: dir, env: { ...process.env, YOUTRACK_URL: "https://tracker.example.test/", YOUTRACK_TOKEN: "packed-smoke-placeholder", YOUTRACK_LOG_LEVEL: "error" }, stdio: ["pipe", "pipe", "pipe"], shell: process.platform === "win32" });
   const request = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "packed-smoke", version: "1" } } };
   child.stdin.write(`${JSON.stringify(request)}\n`);
   const result = await new Promise((resolveResult, reject) => { const timer = setTimeout(() => reject(new Error("Packed stdio handshake timed out")), 10_000); child.stdout.once("data", (chunk) => { clearTimeout(timer); resolveResult(String(chunk)); }); child.once("error", reject); });

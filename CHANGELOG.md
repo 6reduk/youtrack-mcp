@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9 - 2026-07-17
+
+- Start the CLI unconditionally so local npm/npx installs work when `node_modules/.bin/youtrack-mcp` is a symlink on macOS and Linux.
+- Exercise the installed npm bin shim in packed smoke tests and cover symlink startup with a protocol regression test.
+
 ## 0.1.8 - 2026-07-16
 
 - Add `youtrack_execute_plan`, a bounded two-phase batch tool with read-only preview, canonical SHA-256 `planHash`, explicit confirmation, exact selectors, and mandatory optimistic timestamp guards.

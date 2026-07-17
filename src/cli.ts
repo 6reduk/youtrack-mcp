@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { ConfigError, loadRuntimeConfig } from "./infrastructure/config.js";
@@ -37,9 +36,4 @@ export async function main(
   }
 }
 
-const isDirectExecution =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isDirectExecution) {
-  void main().then((code) => { process.exitCode = code; });
-}
+void main().then((code) => { process.exitCode = code; });
